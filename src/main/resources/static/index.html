@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="application-name" content="Kafka Visualizer" />
+    <title>Kafka Visualization</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="toolbar" id="toolbar">
+      <div class="toolbar-left">
+        <button id="toggle-sidebar" aria-expanded="false">
+          → Show Configuration
+        </button>
+      </div>
+      <div class="toolbar-right">
+        <span class="animation-label">Animation speed:</span>
+        <div
+          id="animation-buttons"
+          class="segmented"
+          role="group"
+          aria-label="Animation speed"
+        >
+          <button data-speed=".25">0.25×</button
+          ><button data-speed=".5">0.5×</button
+          ><button data-speed="1" class="selected">1×</button
+          ><button data-speed="2">2×</button><button data-speed="4">4×</button>
+        </div>
+        <button id="playback" class="primary">▶ Resume</button
+        ><button id="reset" class="primary">↻ Restart</button
+        ><button id="quick-produce" hidden>＋ Produce</button
+        ><button id="focus" title="Use the whole viewport">⛶ Focus</button
+        ><button
+          id="more-toggle"
+          aria-expanded="false"
+          aria-controls="more-menu"
+        >
+          ⋯ More
+        </button>
+      </div>
+      <div id="more-menu" class="more-menu" hidden>
+        <button id="step">▸ Step one tick</button
+        ><button id="toggle-diagnostics">Show diagnostics</button
+        ><button id="toggle-legend">Show legend</button
+        ><button id="rebalance">⇄ Rebalance all groups</button
+        ><button id="commit">✓ Commit completed work</button
+        ><span id="clock">Tick 0 · 0.0s</span
+        ><span id="replay-status">Event-driven playback</span>
+        <p>Space: pause / resume · N: produce · Escape: exit focus</p>
+      </div>
+    </header>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <div id="workspace" class="workspace">
+      <aside id="sidebar" class="sidebar" hidden>
+        <div class="drawer-header">
+          <h1>Kafka Visualization</h1>
+          <button id="close-sidebar" aria-label="Close Configuration">×</button>
+        </div>
+        <div class="config-tabs" role="tablist" aria-label="Configuration mode">
+          <button
+            id="custom-tab"
+            role="tab"
+            aria-selected="true"
+            aria-controls="custom-panel"
+            class="selected"
+          >
+            Custom</button
+          ><button
+            id="scenarios-tab"
+            role="tab"
+            aria-selected="false"
+            aria-controls="scenarios-panel"
+          >
+            Scenarios
+          </button>
+        </div>
+        <section id="custom-panel" role="tabpanel" aria-labelledby="custom-tab">
+          <p class="drawer-intro">
+            Name your services, choose partitions and groups, then apply your
+            setup.
+          </p>
+          <div class="config-actions">
+            <button id="apply" class="primary">Apply Configuration</button
+            ><button id="discard">Discard edits</button>
+          </div>
+          <span id="draft-status" class="hint">Live configuration</span>
+          <p id="apply-impact" class="hint"></p>
+          <div class="file-actions">
+            <button id="save-config">↓ Save JSON</button
+            ><button id="load-config">↑ Load JSON</button
+            ><input
+              id="config-file"
+              type="file"
+              accept=".json,application/json"
+              hidden
+            />
+          </div>
+          <details class="config-section" open>
+            <summary>Message production</summary>
+            <div
+              class="segmented production-mode"
+              role="group"
+              aria-label="Production mode"
+            >
+              <button id="auto-mode" class="selected">Auto</button
+              ><button id="manual-mode">Manual</button>
+            </div>
+            <p class="hint" id="production-mode-hint">
+              Automatic publishing uses each producer's configured rate.
+            </p>
+            <div class="manual-fields">
+              <label>Producer<select id="manual-producer"></select></label
+              ><label
+                >Key<input
+                  id="message-key"
+                  placeholder="Empty = round-robin"
+                  maxlength="1000" /></label
+              ><label
+                >Payload<input
+                  id="message-payload"
+                  placeholder="Use producer template"
+                  maxlength="4000" /></label
+              ><button id="produce" class="primary">
+                ＋ Produce One Message
+              </button>
+            </div>
+          </details>
+          <details class="config-section">
+            <summary>Live speed controls</summary>
+            <div class="rate-controls">
+              <label
+                >Producer
+                <input
+                  id="producer-speed"
+                  type="range"
+                  min=".25"
+                  max="10"
+                  step=".25"
+                  value="1"
+                /><output id="producer-speed-value">1 msg/s</output></label
+              ><label
+                >Consumer
+                <input
+                  id="consumer-speed"
+                  type="range"
+                  min=".25"
+                  max="10"
+                  step=".25"
+                  value="1"
+                /><output id="consumer-speed-value">1 msg/s</output></label
+              >
+            </div>
+          </details>
+          <div id="config-editor"></div>
+        </section>
+        <section
+          id="scenarios-panel"
+          role="tabpanel"
+          aria-labelledby="scenarios-tab"
+          hidden
+        >
+          <p class="drawer-intro">
+            Running a scenario replaces current messages and offsets.
+          </p>
+          <label class="scenario-select"
+            >Scenario<select id="scenario-select"></select
+          ></label>
+          <p id="scenario-explanation"></p>
+          <button id="run-scenario" class="primary">
+            ▶ Run scenario & reset
+          </button>
+        </section>
+        <details class="config-section view-settings" open>
+          <summary>View</summary>
+          <label
+            >Topic<select id="topic-filter">
+              <option value="">All topics</option>
+            </select></label
+          ><label
+            >Group<select id="group-filter">
+              <option value="">All groups</option>
+            </select></label
+          ><label
+            ><input id="show-replication" type="checkbox" checked /> Show
+            replication</label
+          ><label
+            ><input id="show-commits" type="checkbox" /> Show commit
+            flows</label
+          ><label
+            ><input id="show-followers" type="checkbox" checked /> Show follower
+            replicas</label
+          ><button id="fit-view">Fit view</button>
+        </details>
+        <details class="learning">
+          <summary>Kafka meanings & simulation assumptions</summary>
+          <p>
+            Colors identify partitions. Filled circles and blocks are leaders;
+            outlines are followers. Groups are logical memberships, not servers.
+            Ordering is per partition. Consumption never deletes records. A
+            committed offset is the next offset to consume.
+          </p>
+          <p>
+            Simulation: synchronous replication, acks=all, min ISR=1, immediate
+            failure detection and safe commits of completed work. Stopped
+            brokers keep their logs. Retention is a record-count limit. Groups
+            alone do not guarantee exactly-once business processing.
+          </p>
+          <p>
+            Click a broker or consumer for actions; click a partition for its
+            log, assignments and offsets. View changes never change Kafka state.
+          </p>
+        </details>
+      </aside>
+      <main id="main">
+        <div id="legend" class="legend" hidden>
+          <span class="legend-partition p0">P0</span
+          ><span class="legend-partition p1">P1</span
+          ><span class="legend-partition p2">P2</span
+          ><span class="legend-partition p3">P3</span
+          ><span>● Filled: leader</span><span>○ Outline: follower</span
+          ><span>◉ Pulse: processing</span><span>✓ Commit = next offset</span
+          ><span class="failure-text">× Failure</span
+          ><span class="retry-text">↻ Retry</span>
+        </div>
+        <div
+          id="architecture-viewport"
+          class="canvas-viewport"
+          tabindex="0"
+          aria-label="Horizontal Kafka visualization; pan to explore larger configurations"
+        >
+          <svg
+            id="architecture"
+            aria-label="Producers, broker-hosted partition replicas, and consumer groups"
+            role="img"
+          >
+            <defs>
+              <marker
+                id="arrow"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="5"
+                markerHeight="5"
+                orient="auto-start-reverse"
+              >
+                <path d="M0 0L10 5L0 10z" fill="#9a9fa2" />
+              </marker>
+            </defs>
+            <g id="scaffold"></g>
+            <g id="active-paths"></g>
+            <g id="diagram-nodes"></g>
+            <g id="packets"></g>
+          </svg>
+        </div>
+        <div class="canvas-tools">
+          <button id="zoom-out" aria-label="Zoom out">−</button
+          ><button id="zoom-fit">Fit</button
+          ><button id="zoom-in" aria-label="Zoom in">＋</button
+          ><span id="view-caption"
+            >Simulation · click a component for details</span
+          >
+        </div>
+        <button id="exit-focus" hidden>↙ Exit focus</button>
+        <section id="bottom-panel" class="bottom-panel" hidden>
+          <div class="panel-heading">
+            <div class="tabs">
+              <button data-tab="events" class="selected">Events</button
+              ><button data-tab="offsets">Lag & offsets</button
+              ><button data-tab="processing">Processing</button>
+            </div>
+            <button id="close-diagnostics" aria-label="Close diagnostics">
+              ×
+            </button>
+          </div>
+          <div id="panel-content" class="panel-content"></div>
+        </section>
+      </main>
+    </div>
+    <dialog id="inspector">
+      <div class="dialog-heading">
+        <h2 id="inspector-title">Partition</h2>
+        <button id="close-inspector">×</button>
+      </div>
+      <div id="inspector-content"></div>
+    </dialog>
+    <dialog id="component-actions">
+      <div class="dialog-heading">
+        <h2 id="component-title">Component</h2>
+        <button id="close-component">×</button>
+      </div>
+      <p id="component-description"></p>
+      <div id="component-buttons" class="component-buttons"></div>
+    </dialog>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
