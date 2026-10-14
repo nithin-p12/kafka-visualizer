@@ -92,7 +92,7 @@ export class Diagram {
     this.signature = "";
     this.view = {};
   }
-  update(state, view, histories, producerHistories, selected) {
+  update(state, view, histories, unused, selected) {
     this.state = state;
     this.view = view;
     const signature = JSON.stringify([
@@ -163,18 +163,25 @@ export class Diagram {
         (x) => x.id === p.data.id,
       );
       p.data = data;
+      const queue =
+        state.producerQueues?.find((q) => q.producerId === data.id)?.messages ||
+        [];
+      const waiting = queue[0]?.status.startsWith("Waiting")
+        ? queue[0].status
+        : state.manualStatus?.startsWith("Waiting") ||
+            state.manualStatus?.startsWith("Stored")
+          ? state.manualStatus
+          : "";
+      const blocks = queue
+        .slice(0, p.queueRows)
+        .map(
+          (m, i) =>
+            `<g class="queued-message" data-message="${esc(m.id)}"><title>${esc(m.id)} · ${esc(m.status)} · key ${esc(m.key || "∅")} · ${esc(m.payload)} · no Kafka offset yet</title><rect x="${p.cx - 42}" y="${p.queueY + i * 28}" width="84" height="26" rx="2" fill="#828384" stroke="${i === 0 ? "#1677ff" : "none"}" stroke-width="2"/>${label(p.cx, p.queueY + i * 28 + 14, m.id, "record-number", "middle").replace('class="record-number"', 'class="record-number" fill="white"')}</g>`,
+        )
+        .join("");
       items.push({
         node: p,
-        html: `<title>${esc(data.name)} publishes to ${esc(state.configuration.topics.find((t) => t.id === data.topicId)?.name)}. ${data.automatic ? "Click for actions." : "Click or press Enter/Space to publish one template message. Edit in Configuration."}</title>${circle(p.cx, p.cy, 22, 'class="actor-marker focus-ring"')}${label(p.cx, p.cy + 1, "P", "actor-symbol", "middle")}${wrapped(p.cx, p.cy + 48, data.name, 24)}${(
-          producerHistories.get(data.id) || []
-        )
-          .slice(-3)
-          .reverse()
-          .map(
-            (m, i) =>
-              `<rect x="${p.cx - 83 + i * 58}" y="${p.cy + 95}" width="50" height="26" fill="#828384" rx="1"/>${label(p.cx - 58 + i * 58, p.cy + 113, m.id, "record-number", "middle").replace('class="record-number"', 'class="record-number" fill="white"')}`,
-          )
-          .join("")}`,
+        html: `<title>${esc(data.name)} publishes to ${esc(state.configuration.topics.find((t) => t.id === data.topicId)?.name)}. ${data.automatic ? "Click for actions." : "Click or press Enter/Space to publish the next queued message. Edit in Configuration."}</title>${circle(p.cx, p.cy, 22, 'class="actor-marker focus-ring"')}${label(p.cx, p.cy + 1, "P", "actor-symbol", "middle")}${wrapped(p.cx, p.cy + 48, data.name, 24)}${label(p.cx, p.cy + 84, "Next → pending FIFO", "status-text", "middle")}${blocks}${queue.length > p.queueRows ? label(p.cx, p.queueY + p.queueRows * 28 + 16, queue.length - p.queueRows + " more pending", "status-text", "middle") : ""}${waiting ? label(p.cx, p.queueY + p.queueRows * 28 + 34, fitText(waiting, 190, 11), "status-text", "middle") : ""}`,
       });
     }
     for (const b of l.brokers) {
@@ -233,7 +240,9 @@ export class Diagram {
       );
       const recent = (histories.get(c.id) || [])
         .filter(
-          (e) => !view.topic || e.partitionKey.split(":")[0] === view.topic,
+          (e) =>
+            e.groupId === c.groupId &&
+            (!view.topic || e.partitionKey.split(":")[0] === view.topic),
         )
         .slice(-5)
         .reverse();
@@ -247,12 +256,12 @@ export class Diagram {
             ...recent
               .filter((e) => e.messageId !== c.processing.message.id)
               .map((e) => ({
-                message: { id: e.messageId, offset: e.offset },
+                message: e.message || { id: e.messageId, offset: e.offset },
                 key: e.partitionKey,
               })),
           ].slice(0, 5)
         : recent.map((e) => ({
-            message: { id: e.messageId, offset: e.offset },
+            message: e.message || { id: e.messageId, offset: e.offset },
             key: e.partitionKey,
           }));
       items.push({

@@ -10,7 +10,16 @@ public final class SimulationEngine {
     public record Event(long id, long tick, long epoch, String stage, String messageId, String partitionKey,
                         String topicName, String groupId, String source, String destination,
                         String sourceName, String destinationName, Long offset, Long committedNext,
-                        long generation, String description) {}
+                        long generation, String description, Message message) {}
+    public record PendingMessage(String id, String key, String payload, boolean requested, String status) {}
+    private static final class Pending {
+        final String id;
+        String key, payload, status = "Ready template";
+        boolean requested;
+        Pending(String id, String key, String payload) { this.id=id; this.key=key; this.payload=payload; }
+        PendingMessage view() { return new PendingMessage(id,key,payload,requested,status); }
+    }
+    private record ManualTarget(Message message, String partitionKey, Set<String> groups) {}
     private static final class Replica {
         final String brokerId;
         final List<Message> log = new ArrayList<>();
@@ -61,6 +70,11 @@ public final class SimulationEngine {
     private final Map<String, Group> groups = new LinkedHashMap<>();
     private final Map<String, Integer> producerCredit = new HashMap<>(), roundRobin = new HashMap<>();
     private final ArrayDeque<Event> events = new ArrayDeque<>();
+    private final Map<String, ArrayDeque<Pending>> pending = new LinkedHashMap<>();
+    private final List<ManualTarget> manualTargets = new ArrayList<>();
+    private long reservedSequence;
+    private boolean manualBurst, manualSuspended, playbackPaused=true;
+    private String manualStatus = "";
     private long tick, revision, configRevision, eventSequence, messageSequence, epoch;
     private boolean running;
     private int scenario, scenarioPhase;
@@ -130,6 +144,7 @@ public final class SimulationEngine {
         boolean resetNeeded = requiresReset(next);
         if (resetNeeded && !resetAllowed) throw new SimulationException("This change requires a reset of messages and offsets.", true);
         var old = configuration;
+        scenario = scenarioPhase = 0;
         // Defensive collection copies: callers cannot mutate the active configuration after validation.
         configuration = new Configuration(1, List.copyOf(next.brokers()), List.copyOf(next.topics()), List.copyOf(next.producers()),
                 List.copyOf(next.groups()), next.consumers().stream().map(c -> new Configuration.Consumer(c.id(), c.name(), c.groupId(), List.copyOf(c.topicIds()), c.rate())).toList(),
@@ -157,17 +172,19 @@ public final class SimulationEngine {
                 .forEach(c -> affectedGroups.add(c.groupId()));
         if (!affectedGroups.isEmpty()) rebalance(affectedGroups);
         producerCredit.keySet().retainAll(configuration.producers().stream().map(Configuration.Producer::id).toList());
+        reconcilePending();
         retain(); revision++;
         emit("CONFIGURATION", null, null, "", "", "", null, "Configuration applied; retained records and offsets preserved.");
     }
     public synchronized void reset() {
         running = false; tick = messageSequence = 0; epoch++; revision++;
-        scenario = scenarioPhase = 0; scenarioBroker = null;
+        scenarioPhase = 0; scenarioBroker = null;
+        reservedSequence=0; pending.clear(); manualTargets.clear(); manualBurst=manualSuspended=false; playbackPaused=true; manualStatus="";
         brokers.clear(); partitions.clear(); consumers.clear(); groups.clear(); producerCredit.clear(); roundRobin.clear(); events.clear();
         configuration.brokers().forEach(b -> brokers.put(b.id(), true));
         configuration.consumers().forEach(c -> consumers.put(c.id(), new ConsumerState()));
         configuration.groups().forEach(g -> groups.put(g, new Group()));
-        addPartitions(); rebalance();
+        addPartitions(); rebalance(); reconcilePending();
         emit("RESET", null, null, "", "", "", null, "Reset: logs and offsets cleared. Configuration retained. Simulation paused.");
     }
     private void addPartitions() {
@@ -189,11 +206,15 @@ public final class SimulationEngine {
     public synchronized void command(Command command) {
         if (command == null || command.type() == null) fail("Command type is required");
         switch (command.type()) {
-            case "START", "RESUME" -> running = true;
-            case "PAUSE" -> running = false;
-            case "STEP" -> { if (running) throw new SimulationException("Pause before stepping.", true); advance(); }
-            case "RESET" -> reset();
-            case "PRODUCE" -> produce(producer(command.targetId()), command.key(), command.payload());
+            case "START", "RESUME" -> { playbackPaused=false; if (manualBurst) manualSuspended=false; else running = true; }
+            case "PAUSE" -> { playbackPaused=true; running = false; if (manualBurst) manualSuspended=true; }
+            case "STEP" -> { if (running) throw new SimulationException("Pause before stepping.", true); playbackPaused=false; advance(); }
+            case "RESET" -> {
+                if(scenario>0) {
+                    int selected=scenario; apply(scenarioConfiguration(selected),true,null); scenario=selected;
+                } else reset();
+            }
+            case "PRODUCE" -> requestProduce(producer(command.targetId()), command.key(), command.payload());
             case "BROKER_STOP", "BROKER_RESTART" -> {
                 if (!brokers.containsKey(command.targetId())) fail("Unknown broker");
                 boolean online = command.type().equals("BROKER_RESTART");
@@ -222,7 +243,13 @@ public final class SimulationEngine {
         }
         revision++;
     }
-    public synchronized void advanceIfRunning() { if (running) advance(); }
+    public synchronized void advanceIfRunning() { if (shouldAdvance()) advance(); }
+    public synchronized boolean shouldAdvance() { return running || (manualBurst && !manualSuspended && manualRunnable()); }
+    public synchronized void pacedAdvance(long expectedEpoch, long expectedTick, long completedEventId) {
+        if (expectedEpoch != epoch || expectedTick != tick || completedEventId < eventSequence)
+            throw new SimulationException("Playback state changed; refresh before advancing.", true);
+        if (shouldAdvance()) advance();
+    }
     public synchronized void advance() {
         tick++;
         scenarioActions();
@@ -236,14 +263,15 @@ public final class SimulationEngine {
             }
         }
         completeRebalances();
-        for (var producer : configuration.producers()) if (producer.automatic()) {
+        dispatchRequested();
+        for (var producer : configuration.producers()) if (producer.automatic() && !manualBurst) {
             int credit = producerCredit.getOrDefault(producer.id(), 0) + (int)Math.round(producer.rate() * 4);
-            if (credit >= 40) { produce(producer, null, null); credit -= 40; }
+            if (credit >= 40) { publishHead(producer); credit -= 40; }
             producerCredit.put(producer.id(), credit);
         }
         for (var c : configuration.consumers()) process(c);
         if (configuration.autoCommit() && tick % configuration.commitIntervalTicks() == 0) configuration.consumers().forEach(this::commit);
-        retain(); revision++;
+        retain(); updateManualFlow(); revision++;
     }
     private void elect(Partition p) {
         if (p.leader != null && Boolean.TRUE.equals(brokers.get(p.leader)) && p.replicas.get(p.leader).end == p.end) return;
@@ -253,17 +281,22 @@ public final class SimulationEngine {
         if (!Objects.equals(previous, p.leader)) emit(p.leader == null ? "UNAVAILABLE" : "ELECTION", null, p, "", "", p.leader == null ? "" : p.node(p.leader), null,
                 partitionName(p) + (p.leader == null ? " unavailable: no eligible in-sync replica." : " leader is now " + brokerName(p.leader) + ". Acknowledged records preserved."));
     }
-    private void produce(Configuration.Producer producer, String keyOverride, String payloadOverride) {
-        String key = keyOverride == null ? producer.key() : keyOverride;
-        String payload = payloadOverride == null ? producer.payload() : payloadOverride;
-        if (key.length() > 1000 || payload.length() > 4000) fail("Message key/payload is too long");
+    private boolean publishHead(Configuration.Producer producer) {
+        var head = pending.get(producer.id()).getFirst();
+        String key = head.key, payload = head.payload;
         var topic = topic(producer.topicId());
         String rrKey = producer.id() + ":" + topic.id();
         int number = key.isEmpty() ? Math.floorMod(roundRobin.getOrDefault(rrKey, 0), topic.partitions()) : keyedPartition(key, topic.partitions());
-        if (key.isEmpty()) roundRobin.put(rrKey, (number + 1) % topic.partitions());
         var p = partitions.get(topic.id() + ":" + number);
-        if (p.leader == null) { emit("FAILED", null, p, "", "producer:" + producer.id(), "", null, producer.name() + " rejected: " + partitionName(p) + " has no leader. No acknowledgement or offset allocated."); return; }
-        var m = new Message("M" + (++messageSequence), p.end, key, payload, producer.id(), tick);
+        if (p.leader == null) {
+            if (!head.status.startsWith("Waiting")) emit("FAILED", null, p, "", "producer:" + producer.id(), "", null, producer.name() + " waiting: " + partitionName(p) + " has no leader. Pending message retained; no acknowledgement or offset allocated.");
+            head.status="Waiting for partition leader"; return false;
+        }
+        if (key.isEmpty()) roundRobin.put(rrKey, (number + 1) % topic.partitions());
+        var m = new Message(head.id, p.end, key, payload, producer.id(), tick);
+        messageSequence++;
+        boolean requested = head.requested;
+        pending.get(producer.id()).removeFirst(); refill(producer);
         emit("PRODUCED", m, p, "", "producer:" + producer.id(), p.node(p.leader), null, producer.name() + " → " + partitionName(p) + " offset " + m.offset());
         var leader = p.replicas.get(p.leader); leader.log.add(m); leader.end = p.end + 1;
         for (var replica : p.replicas.values()) if (!replica.brokerId.equals(p.leader) && Boolean.TRUE.equals(brokers.get(replica.brokerId)) && replica.inSync) {
@@ -273,6 +306,86 @@ public final class SimulationEngine {
         p.end++;
         emit("ACKNOWLEDGED", m, p, "", p.node(p.leader), "producer:" + producer.id(), null, m.id() + " acknowledged by all current ISR; min.insync.replicas=1.");
         retainPartition(p);
+        if (requested && manualBurst) {
+            var subscribed = configuration.consumers().stream().filter(c -> c.topicIds().contains(producer.topicId()))
+                    .map(Configuration.Consumer::groupId).collect(java.util.stream.Collectors.toSet());
+            manualTargets.add(new ManualTarget(m,p.key(),subscribed));
+        }
+        return true;
+    }
+    private void reconcilePending() {
+        pending.keySet().retainAll(configuration.producers().stream().map(Configuration.Producer::id).toList());
+        for (var p : configuration.producers()) {
+            pending.computeIfAbsent(p.id(), ignored -> new ArrayDeque<>());
+            for (var m : pending.get(p.id())) if (!m.requested) { m.key=p.key(); m.payload=p.payload(); m.status="Ready template"; }
+        }
+        // Round-robin reservation is deterministic. IDs identify application messages, not offsets.
+        for (int i=0;i<10;i++) for (var p : configuration.producers()) if (pending.get(p.id()).size()<10)
+            pending.get(p.id()).addLast(new Pending("M"+(++reservedSequence),p.key(),p.payload()));
+    }
+    private void refill(Configuration.Producer p) {
+        while (pending.get(p.id()).size()<10) pending.get(p.id()).addLast(new Pending("M"+(++reservedSequence),p.key(),p.payload()));
+    }
+    private void requestProduce(Configuration.Producer p, String key, String payload) {
+        if ((key!=null && key.length()>1000) || (payload!=null && payload.length()>4000)) fail("Message key/payload is too long");
+        var next = pending.get(p.id()).stream().filter(m -> !m.requested).findFirst()
+                .orElseThrow(() -> new SimulationException("Ten publish requests are already pending for this producer.",true));
+        next.key=key==null?p.key():key; next.payload=payload==null?p.payload():payload;
+        next.requested=true; next.status="Publish requested";
+        playbackPaused=false;
+        if (!running) { manualBurst=true; manualSuspended=false; manualStatus="Manual message journey"; }
+        emit("QUEUED",null,null,"","producer:"+p.id(),"",null,next.id+" queued by "+p.name()+"; waiting for paced dispatch.");
+        updateManualFlow();
+    }
+    synchronized void dispatchRequested() {
+        for (var p : configuration.producers()) if (pending.get(p.id()).getFirst().requested) publishHead(p);
+    }
+    private boolean targetComplete(ManualTarget target) {
+        var p=partitions.get(target.partitionKey());
+        return p==null || target.message().offset()<p.start || target.groups().stream().allMatch(id ->
+            !groups.containsKey(id) || groups.get(id).processed.getOrDefault(target.partitionKey(),Set.of()).contains(target.message().offset()));
+    }
+    private boolean manualRunnable() {
+        for (var p : configuration.producers()) {
+            var head=pending.get(p.id()).getFirst();
+            if (head.requested) {
+                int n=head.key.isEmpty()?roundRobin.getOrDefault(p.id()+":"+p.topicId(),0)%topic(p.topicId()).partitions():keyedPartition(head.key,topic(p.topicId()).partitions());
+                if (partitions.get(p.topicId()+":"+n).leader!=null) return true;
+            }
+        }
+        for (var target : manualTargets) if (!targetComplete(target)) for (var id : target.groups()) {
+            var g=groups.get(id); if (g==null || g.processed.getOrDefault(target.partitionKey(),Set.of()).contains(target.message().offset())) continue;
+            if (g.rebalanceTicks>0) return true;
+            var owner=g.assignments.get(target.partitionKey()); var c=consumers.get(owner); var p=partitions.get(target.partitionKey());
+            if (c!=null && c.online && !c.paused && (p.leader!=null || c.work!=null)) return true;
+        }
+        return false;
+    }
+    private void updateManualFlow() {
+        if (!manualBurst) return;
+        boolean stored=manualTargets.stream().anyMatch(t -> t.groups().isEmpty());
+        manualTargets.removeIf(this::targetComplete);
+        boolean requested=pending.values().stream().flatMap(Collection::stream).anyMatch(m -> m.requested);
+        if (!requested && manualTargets.isEmpty()) { manualBurst=false; manualSuspended=false; manualStatus=stored?"Stored: no subscribed consumer group":"Manual journey complete; paused"; }
+        else manualStatus=manualRunnable()?"Manual message journey":waitingForLeader()?"Waiting for partition leader":"Waiting for eligible consumer";
+    }
+    private boolean waitingForLeader() {
+        for(var p:configuration.producers()) {
+            var head=pending.get(p.id()).getFirst();
+            if(!head.requested)continue;
+            int n=head.key.isEmpty()?roundRobin.getOrDefault(p.id()+":"+p.topicId(),0)%topic(p.topicId()).partitions():keyedPartition(head.key,topic(p.topicId()).partitions());
+            if(partitions.get(p.topicId()+":"+n).leader==null) {head.status="Waiting for partition leader";return true;}
+        }
+        for(var target:manualTargets) if(!targetComplete(target)) {
+            var p=partitions.get(target.partitionKey());
+            if(p==null || p.leader!=null)continue;
+            for(var id:target.groups()) {
+                var g=groups.get(id);if(g==null)continue;
+                var c=consumers.get(g.assignments.get(target.partitionKey()));
+                if(c==null || c.work==null)return true;
+            }
+        }
+        return false;
     }
     private void rebalance() {
         rebalance(new LinkedHashSet<>(groups.keySet()));
@@ -382,10 +495,13 @@ public final class SimulationEngine {
     }
 
     public synchronized void scenario(int id) {
-        var next = Scenarios.configuration(id);
-        if (id == 6) next = new Configuration(1, next.brokers(), next.topics(), next.producers(), next.groups(), next.consumers(), 600, 50, true);
-        apply(next, true, null); scenario = id; running = true;
+        var next = scenarioConfiguration(id);
+        apply(next, true, null); scenario = id; running = true; playbackPaused=false;
         emit("SCENARIO", null, null, "", "", "", null, Scenarios.ALL.get(id - 1).explanation());
+    }
+    private Configuration scenarioConfiguration(int id) {
+        var next=Scenarios.configuration(id);
+        return id==6?new Configuration(1,next.brokers(),next.topics(),next.producers(),next.groups(),next.consumers(),600,50,true):next;
     }
     private void scenarioActions() {
         if (scenario == 6) {
@@ -401,8 +517,9 @@ public final class SimulationEngine {
         } else if (scenario == 10 && scenarioPhase == 0 && consumers.values().stream().anyMatch(c -> c.successes >= 2)) {
             var list = new ArrayList<>(configuration.consumers());
             list.add(new Configuration.Consumer("c3", "ResultsService-3", "results-group", List.of("t1"), 1));
+            int activeScenario=scenario;
             apply(new Configuration(1, configuration.brokers(), configuration.topics(), configuration.producers(), configuration.groups(), list,
-                    configuration.commitIntervalTicks(), configuration.retentionLimit(), configuration.autoCommit()), false, null); scenarioPhase = 1;
+                    configuration.commitIntervalTicks(), configuration.retentionLimit(), configuration.autoCommit()), false, null); scenario=activeScenario; scenarioPhase = 1;
         }
     }
 
@@ -423,7 +540,7 @@ public final class SimulationEngine {
     private void emit(String stage, Message message, Partition p, String groupId, String source, String destination, Long committed, String description) {
         var event = new Event(++eventSequence, tick, epoch, stage, message == null ? "" : message.id(), p == null ? "" : p.key(),
                 p == null ? "" : topic(p.topicId).name(), groupId, source, destination, nodeName(source), nodeName(destination),
-                message == null ? null : message.offset(), committed, groups.containsKey(groupId) ? groups.get(groupId).generation : 0, description);
+                message == null ? null : message.offset(), committed, groups.containsKey(groupId) ? groups.get(groupId).generation : 0, description, message);
         events.add(event); while (events.size() > 2000) events.removeFirst();
     }
     public synchronized Map<String, Object> snapshot(long afterEventId) {
@@ -464,7 +581,9 @@ public final class SimulationEngine {
         return map("tick", tick, "tickMillis", 100, "revision", revision, "configRevision", configRevision, "epoch", epoch,
                 "running", running, "configuration", configuration, "brokers", brokerViews, "groups", groupViews,
                 "events", eventList, "latestEventId", eventSequence, "eventGap", !events.isEmpty() && afterEventId > 0 && afterEventId < events.getFirst().id() - 1,
-                "scenarioId", scenario, "scenarioPhase", scenarioPhase, "messageCount", messageSequence);
+                "scenarioId", scenario, "scenarioPhase", scenarioPhase, "messageCount", messageSequence,
+                "producerQueues",configuration.producers().stream().map(p -> map("producerId",p.id(),"messages",pending.get(p.id()).stream().map(Pending::view).toList())).toList(),
+                "manualFlow",manualBurst, "manualSuspended",manualSuspended, "canAdvance",shouldAdvance(), "manualStatus",manualStatus,"playbackPaused",playbackPaused);
     }
     public synchronized Map<String, Object> history(String topicId, int number, String brokerId, int page) {
         var p = partitions.get(topicId + ":" + number);

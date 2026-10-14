@@ -1,5 +1,6 @@
 import { Diagram, esc } from "./diagram.js";
 import { Replay } from "./replay.js";
+import { Presentation } from "./presentation.js";
 const $ = (id) => document.getElementById(id),
   clone = (x) => structuredClone(x);
 const stages = {
@@ -35,10 +36,31 @@ let actionQueue = Promise.resolve(),
   configEditorRevision = -1,
   lastError,
   noticeTimer;
-const histories = new Map(),
-  producerHistories = new Map();
+const presentation = new Presentation();
+const pendingActions = new Map();
+let pendingStep = false,
+  stepRequestBusy = false;
+let visualDirty = false,
+  playbackBusy = false,
+  ownsPlayback = false,
+  nextTickAt = 0;
+const clientId =
+  sessionStorage.getItem("kafka-playback-client") || crypto.randomUUID();
+sessionStorage.setItem("kafka-playback-client", clientId);
 const diagram = new Diagram($("architecture"), $("architecture-viewport")),
-  replay = new Replay(diagram);
+  replay = new Replay(diagram, {
+    start: (e) => {
+      presentation.start(e);
+      visualDirty = true;
+    },
+    finish: (e) => {
+      presentation.finish(e);
+      visualDirty = true;
+    },
+    cancel: () => {
+      visualDirty = true;
+    },
+  });
 const view = {
   topic: "",
   group: "",
@@ -72,10 +94,13 @@ async function api(path, options = {}) {
     ...options,
   });
   const data = await response.json();
-  if (!response.ok)
-    throw new Error(
+  if (!response.ok) {
+    const error = new Error(
       data.message || data.detail || "Request failed (" + response.status + ")",
     );
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 function action(task) {
@@ -83,26 +108,52 @@ function action(task) {
   return actionQueue;
 }
 function command(type, targetId, extra = {}) {
+  if (["RESET", "RESUME", "START", "PAUSE", "PRODUCE"].includes(type))
+    pendingStep = false;
+  if (type === "PRODUCE") {
+    const q = state?.producerQueues.find((q) => q.producerId === targetId);
+    if (
+      !q ||
+      q.messages.filter((m) => m.requested).length +
+        (pendingActions.get(targetId) || 0) >=
+        10
+    )
+      return Promise.resolve();
+    pendingActions.set(targetId, (pendingActions.get(targetId) || 0) + 1);
+    updateModes();
+  }
   return action(async () => {
-    if (type === "RESET") replay.reset();
-    const data = await api("/commands", {
-      method: "POST",
-      body: JSON.stringify({ type, targetId, ...extra }),
-    });
-    receive(data);
-    if (type === "STEP" || (type === "PRODUCE" && !data.running))
-      replay.step = true;
+    try {
+      if (type === "RESET") replay.reset();
+      const data = await api("/commands", {
+        method: "POST",
+        body: JSON.stringify({ type, targetId, ...extra }),
+      });
+      receive(data);
+      if (type === "PAUSE") replay.step = false;
+      if (type === "STEP" || (type === "PRODUCE" && !data.running))
+        replay.step = true;
+    } finally {
+      if (type === "PRODUCE") {
+        pendingActions.set(
+          targetId,
+          Math.max(0, (pendingActions.get(targetId) || 0) - 1),
+        );
+        updateModes();
+      }
+    }
   });
 }
 function receive(next) {
   if (state && next.revision < state.revision) return;
-  if (currentEpoch !== next.epoch) {
+  const first = !state;
+  const newEpoch = currentEpoch !== next.epoch;
+  if (newEpoch || next.eventGap) {
     replay.reset();
+    presentation.reset();
     currentEpoch = next.epoch;
     lastEventId = 0;
     eventLog = [];
-    histories.clear();
-    producerHistories.clear();
     selectedReplica = null;
     if ($("inspector").open) $("inspector").close();
   }
@@ -114,32 +165,28 @@ function receive(next) {
   )
     replay.step = true;
   state = next;
+  const seed = (first && next.messageCount > 0) || next.eventGap;
+  presentation.sync(next, seed);
+  if (seed) presentation.seedHistory(next);
   if (!dirty) {
     draft = clone(next.configuration);
     draftBaseRevision = next.configRevision;
   }
   if (next.eventGap) {
-    replay.summarized++;
     notice(
-      "Older replay events expired. The current architecture and offsets are authoritative.",
+      "Reconnected: existing retained history loaded. New messages will animate individually.",
     );
   }
   for (const event of next.events.filter((e) => e.id > lastEventId)) {
     eventLog.push(event);
-    replay.enqueue(event);
-    if (event.stage === "PROCESSED") {
-      const id = event.source.slice(9),
-        items = histories.get(id) || [];
-      items.push(event);
-      histories.set(id, items.slice(-20));
-    }
-    if (event.stage === "PRODUCED") {
-      const id = event.source.slice(9),
-        items = producerHistories.get(id) || [];
-      items.push({ id: event.messageId, offset: event.offset });
-      producerHistories.set(id, items.slice(-5));
+    if (!seed) {
+      presentation.announce(event);
+      replay.enqueue(event);
     }
   }
+  if (next.playbackPaused && !pendingStep) replay.step = false;
+  else if (!replay.idle) replay.step = true;
+  if (replay.idle) presentation.settle();
   eventLog = eventLog.slice(-200);
   lastEventId = Math.max(lastEventId, next.latestEventId);
   render();
@@ -195,7 +242,13 @@ function renderFilters() {
 }
 function renderArchitecture() {
   if (state)
-    diagram.update(state, view, histories, producerHistories, selectedReplica);
+    diagram.update(
+      presentation.snapshot(),
+      view,
+      presentation.histories,
+      null,
+      selectedReplica,
+    );
 }
 function updateModes() {
   const auto = state.configuration.producers.every((p) => p.automatic),
@@ -203,6 +256,15 @@ function updateModes() {
   $("auto-mode").classList.toggle("selected", auto);
   $("manual-mode").classList.toggle("selected", manual);
   $("quick-produce").hidden = !manual;
+  const q = state.producerQueues.find(
+    (q) => q.producerId === $("manual-producer").value,
+  );
+  const full =
+    q &&
+    q.messages.filter((m) => m.requested).length +
+      (pendingActions.get(q.producerId) || 0) >=
+      10;
+  $("quick-produce").disabled = $("produce").disabled = !!full;
   document.querySelector(".manual-fields").hidden = !manual;
   $("production-mode-hint").textContent = auto
     ? "Automatic publishing uses each producer’s rate."
@@ -217,13 +279,48 @@ function render() {
   if (!$("bottom-panel").hidden) renderPanel();
   updateSliders();
   updateModes();
-  $("playback").textContent = state.running ? "Ⅱ Pause" : "▶ Resume";
-  $("step").disabled = state.running;
+  $("playback").textContent =
+    state.canAdvance || (!replay.idle && replay.step) ? "Ⅱ Pause" : "▶ Resume";
+  $("step").disabled = state.canAdvance || pendingStep;
+  const c = state.configuration,
+    factors = c.topics.map((t) => t.replicationFactor);
+  const rf =
+    Math.min(...factors) === Math.max(...factors)
+      ? factors[0]
+      : Math.min(...factors) + "–" + Math.max(...factors);
+  const mode = c.producers.every((p) => p.automatic)
+    ? "Auto"
+    : c.producers.every((p) => !p.automatic)
+      ? "Manual"
+      : "Mixed";
+  const scenario = scenarios.find((s) => s.id === state.scenarioId);
+  const summary = scenario
+    ? "Scenario " + scenario.id + ": " + scenario.name
+    : "Custom · " +
+      c.brokers.length +
+      " brokers · " +
+      c.topics.length +
+      " topics · " +
+      c.topics.reduce((n, t) => n + t.partitions, 0) +
+      " partitions · RF " +
+      rf +
+      " · " +
+      c.producers.length +
+      " prod · " +
+      c.consumers.length +
+      " cons · " +
+      c.groups.length +
+      " groups · " +
+      mode;
+  $("setup-summary").textContent = summary;
+  $("setup-summary").title =
+    summary + (state.manualStatus ? " · " + state.manualStatus : "");
   $("clock").textContent =
     "Tick " + state.tick + " · " + (state.tick / 10).toFixed(1) + "s";
   if (selectedReplica && $("inspector").open) renderInspector(false);
 }
 function renderPanel() {
+  const state = presentation.snapshot();
   let html;
   if (currentTab === "events")
     html =
@@ -659,7 +756,8 @@ function focusView(on) {
     renderArchitecture();
     if (on) {
       diagram.fit();
-      viewport.focus({ preventScroll: true });
+      if (!document.activeElement.closest?.("#architecture"))
+        viewport.focus({ preventScroll: true });
     } else if (focusCamera) {
       diagram.zoom = focusCamera.zoom;
       diagram.resize();
@@ -669,8 +767,9 @@ function focusView(on) {
 }
 function togglePlayback() {
   if (state) {
-    if (state.running) replay.step = false;
-    command(state.running ? "PAUSE" : "RESUME");
+    const advancing = state.canAdvance || (!replay.idle && replay.step);
+    if (advancing) replay.step = false;
+    command(advancing ? "PAUSE" : "RESUME");
   }
 }
 function produceOne(id = $("manual-producer").value) {
@@ -809,7 +908,9 @@ $("playback").onclick = togglePlayback;
 $("reset").onclick = () => command("RESET");
 $("step").onclick = () => {
   closeMore();
-  command("STEP");
+  pendingStep = true;
+  replay.step = true;
+  $("step").disabled = true;
 };
 $("produce").onclick = () => produceOne();
 $("quick-produce").onclick = () => produceOne();
@@ -1010,17 +1111,95 @@ async function initialize() {
       .join("");
     $("scenario-select").onchange();
     await poll();
+    await claimPlayback();
     diagram.fit();
   } catch (e) {
     notice(e.message, true);
   }
 }
+async function claimPlayback() {
+  try {
+    const next = await api("/playback", {
+      method: "POST",
+      body: JSON.stringify({
+        action: ownsPlayback ? "HEARTBEAT" : "CLAIM",
+        clientId,
+        epoch: state.epoch,
+        expectedTick: state.tick,
+        completedEventId: lastEventId,
+      }),
+    });
+    ownsPlayback = next.playbackOwner === clientId;
+    receive(next);
+  } catch (e) {
+    if (e.status === 409) ownsPlayback = false;
+    else notice(e.message, true);
+  }
+}
+async function drive(now) {
+  if (
+    !state ||
+    !ownsPlayback ||
+    playbackBusy ||
+    !replay.idle ||
+    !state.canAdvance ||
+    now < nextTickAt
+  )
+    return;
+  playbackBusy = true;
+  nextTickAt = now + 100;
+  try {
+    receive(
+      await api("/playback", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "ADVANCE",
+          clientId,
+          epoch: state.epoch,
+          expectedTick: state.tick,
+          completedEventId: lastEventId,
+        }),
+      }),
+    );
+  } catch (e) {
+    if (e.status === 409) await poll();
+    else notice(e.message, true);
+  } finally {
+    playbackBusy = false;
+  }
+}
 function frame(now) {
-  replay.frame(now, !!state?.running);
+  const wasIdle = replay.idle;
+  replay.frame(now, !!state?.canAdvance);
+  if (!wasIdle && replay.idle) {
+    presentation.settle();
+    visualDirty = true;
+  }
+  if (visualDirty && state) {
+    visualDirty = false;
+    renderArchitecture();
+    if (!$("bottom-panel").hidden) renderPanel();
+    updateModes();
+    $("step").disabled = state.canAdvance || pendingStep;
+    $("playback").textContent =
+      state.canAdvance || (!replay.idle && replay.step)
+        ? "Ⅱ Pause"
+        : "▶ Resume";
+  }
+  drive(now);
+  if (pendingStep && replay.idle && !stepRequestBusy) {
+    stepRequestBusy = true;
+    command("STEP").finally(() => {
+      pendingStep = false;
+      stepRequestBusy = false;
+      visualDirty = true;
+    });
+  }
   requestAnimationFrame(frame);
 }
 await initialize();
 setInterval(poll, 150);
+setInterval(claimPlayback, 2500);
 requestAnimationFrame(frame);
 window.kafkaLab = {
   get state() {
@@ -1038,4 +1217,10 @@ window.kafkaLab = {
     };
   },
   requiresReset,
+  get visibleState() {
+    return presentation.snapshot();
+  },
+  get ownsPlayback() {
+    return ownsPlayback;
+  },
 };

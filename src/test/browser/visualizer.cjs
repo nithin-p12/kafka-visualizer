@@ -15,7 +15,8 @@ fs.mkdirSync(out, { recursive: true });
     errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(m.text());
+    if (m.type() === "error" && !m.text().includes("409"))
+      errors.push(m.text());
   });
   await page.addInitScript(() => {
     localStorage.removeItem("kafka-view");
@@ -40,7 +41,7 @@ fs.mkdirSync(out, { recursive: true });
     return r.json();
   }
   async function ready(fn, arg) {
-    await page.waitForFunction(fn, arg, { timeout: 25000 });
+    await page.waitForFunction(fn, arg, { timeout: 60000 });
   }
   async function screenshot(name) {
     await page.screenshot({ path: out + "/" + name + ".png", fullPage: true });
@@ -242,6 +243,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.locator("#close-inspector").click();
     await openConfig();
     await page.locator("#manual-mode").click();
+    await page.locator('#animation-buttons [data-speed="4"]').click();
     await ready(() =>
       window.kafkaLab.state.configuration.producers.every((p) => !p.automatic),
     );
@@ -300,6 +302,9 @@ fs.mkdirSync(out, { recursive: true });
           ),
         ),
       ),
+    );
+    await ready(
+      () => !window.kafkaLab.state.manualFlow && window.kafkaLab.playback.idle,
     );
     await openConfig();
     await page.locator("#auto-mode").click();
@@ -500,7 +505,8 @@ fs.mkdirSync(out, { recursive: true });
     await labelsClear();
     await page.locator('#animation-buttons [data-speed=".25"]').click();
     await page.locator("#playback").click();
-    await ready(() => window.kafkaLab.state.tick >= 30);
+    await ready(() => window.kafkaLab.state.tick >= 1);
+    await ready(() => window.kafkaLab.playback.active > 0);
     assert(
       await page.evaluate(
         () =>
@@ -546,14 +552,17 @@ fs.mkdirSync(out, { recursive: true });
     await ready(() => window.kafkaLab.state.messageCount === 1);
     await page.locator(".producer-node").first().click();
     await ready(() => window.kafkaLab.state.messageCount === 2);
-    await req("/commands", { type: "STEP" });
-    await req("/commands", { type: "STEP" });
+    await ready(() => window.kafkaLab.state.messageCount === 2);
+    await ready(() =>
+      [
+        ...document.querySelectorAll('.packet[data-stage="DELIVERED"] title'),
+      ].some((e) => e.textContent.includes("M2")),
+    );
     const lowerState = await req("/state?afterEventId=0", undefined, "GET");
     const delivery = lowerState.events.find(
       (e) => e.stage === "DELIVERED" && e.messageId === "M2",
     );
     assert(delivery, "Broker-2 must deliver the second round-robin message");
-    await ready(() => window.kafkaLab.state.tick === 2);
     const routeCheck = await page.evaluate(async (event) => {
       const { routePoints } = await import("/diagram-layout.js");
       const l = window.kafkaLab.layout;

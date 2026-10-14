@@ -18,7 +18,7 @@ class SimulationEngineTests {
                 c.groups(), c.consumers(), interval, retention, autoCommit);
     }
     private void command(SimulationEngine e, String type, String id) { e.command(new SimulationEngine.Command(type, id, null, null, null)); }
-    private void produce(SimulationEngine e, String key) { e.command(new SimulationEngine.Command("PRODUCE", "p1", key, "test record", null)); }
+    private void produce(SimulationEngine e, String key) { e.command(new SimulationEngine.Command("PRODUCE", "p1", key, "test record", null)); e.dispatchRequested(); }
     private List<Map<String,Object>> groups(SimulationEngine e) { return (List<Map<String,Object>>)e.snapshot(0).get("groups"); }
     private List<Map<String,Object>> members(SimulationEngine e) { return (List<Map<String,Object>>)groups(e).get(0).get("consumers"); }
     private List<Map<String,Object>> offsets(SimulationEngine e) { return (List<Map<String,Object>>)groups(e).get(0).get("offsets"); }
@@ -118,7 +118,7 @@ class SimulationEngineTests {
     @Test void staleReplicaCannotBecomeLeaderAndUnavailableProductionAllocatesNoOffset() {
         var e=engine(2,1,2,1);command(e,"BROKER_STOP","b2");produce(e,"");command(e,"BROKER_STOP","b1");command(e,"BROKER_RESTART","b2");produce(e,"");
         assertEquals(1L,e.snapshot(0).get("messageCount"));assertFalse((boolean)offsets(e).get(0).get("available"));
-        command(e,"BROKER_RESTART","b1");e.advance();assertTrue((boolean)offsets(e).get(0).get("available"));assertEquals(1,e.history("t1",0,"b2",0).get("total"));
+        command(e,"BROKER_RESTART","b1");e.advance();assertTrue((boolean)offsets(e).get(0).get("available"));assertEquals(2,e.history("t1",0,"b2",0).get("total"));
     }
     @Test void allReplicasOfflineRemainUnavailableUntilCurrentReplicaReturns() {
         var e=engine(2,1,2,1);produce(e,"");command(e,"BROKER_STOP","b1");command(e,"BROKER_STOP","b2");

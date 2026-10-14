@@ -13,9 +13,11 @@ import java.util.Map;
 @RequestMapping("/api/simulation")
 public class SimulationController {
     private final SimulationEngine engine;
-    public SimulationController(SimulationEngine engine) { this.engine = engine; }
+    private final PlaybackClock playback;
+    public SimulationController(SimulationEngine engine) { this.engine = engine; this.playback=new PlaybackClock(engine); }
     public record ApplyRequest(com.kafka.visualizer.simulation.Configuration configuration, boolean reset, Long configRevision) {}
-    @GetMapping("/state") public Map<String, Object> state(@RequestParam(defaultValue = "0") long afterEventId) { return engine.snapshot(afterEventId); }
+    @GetMapping("/state") public Map<String, Object> state(@RequestParam(defaultValue = "0") long afterEventId) { return playback.snapshot(afterEventId); }
+    @PostMapping("/playback") public Map<String,Object> playback(@RequestBody PlaybackClock.Request request) { return playback.request(request); }
     @GetMapping("/configuration") public com.kafka.visualizer.simulation.Configuration configuration() { return engine.configuration(); }
     @PutMapping("/configuration") public Map<String, Object> apply(@RequestBody ApplyRequest request) {
         engine.apply(request.configuration(), request.reset(), request.configRevision()); return engine.snapshot(0);
@@ -28,7 +30,7 @@ public class SimulationController {
     @ExceptionHandler(SimulationException.class) public ResponseEntity<Map<String, Object>> invalid(SimulationException e) {
         return ResponseEntity.status(e.conflict() ? 409 : 400).body(Map.of("message", e.getMessage()));
     }
-    @Scheduled(fixedDelay = 100) public void scheduledTick() { engine.advanceIfRunning(); }
+    @Scheduled(fixedDelay = 1000) public void scheduledTick() { playback.expire(); }
     @Configuration
     @EnableScheduling
     static class EngineConfiguration { @Bean SimulationEngine engine() { return new SimulationEngine(); } }

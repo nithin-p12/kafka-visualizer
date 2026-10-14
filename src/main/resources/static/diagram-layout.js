@@ -76,7 +76,7 @@ export function buildLayout(state, view, viewportWidth, viewportHeight) {
     available,
     brokerHeight + 130,
     groupHeight + 130,
-    producers.length * 150 + 130,
+    producers.length > 1 ? producers.length * 300 + 104 : 600,
   );
   const nodes = new Map();
   const brokerNodes = [],
@@ -173,9 +173,16 @@ export function buildLayout(state, view, viewportWidth, viewportHeight) {
   producers.forEach((p, i) => {
     const producerBand = Math.min(
       height,
-      Math.max(available, producers.length * 180 + 100),
+      Math.max(available, producers.length * 300 + 104),
     );
-    const cy = producerBand / 2 + (i - (producers.length - 1) / 2) * 180;
+    const cy =
+      producers.length === 1
+        ? Math.min(height, available) / 2
+        : 80 + (i * (producerBand - 100)) / producers.length;
+    const queueRows =
+      producers.length > 1
+        ? 6
+        : clamp(Math.floor((height - cy - 126) / 28), 6, 10);
     const pn = {
       id: "producer:" + p.id,
       kind: "producer",
@@ -183,9 +190,11 @@ export function buildLayout(state, view, viewportWidth, viewportHeight) {
       x: 30,
       y: cy - 24,
       w: 190,
-      h: 150,
+      h: 128 + queueRows * 28,
       cx: 125,
       cy,
+      queueY: cy + 94,
+      queueRows,
     };
     producerNodes.push(pn);
     nodes.set(pn.id, pn);
@@ -224,8 +233,8 @@ export function routePoints(layout, event) {
   const { brokerX, brokerWidth, consumerX } = layout;
   if (event.stage === "PRODUCED")
     return [
-      [a.cx + 22, a.cy],
-      [brokerX - 44, a.cy],
+      [a.cx, a.queueY + 13],
+      [brokerX - 44, a.queueY + 13],
       [brokerX - 44, b.cy],
       [b.cx - 20, b.cy],
     ];

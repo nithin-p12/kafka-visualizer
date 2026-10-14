@@ -117,6 +117,21 @@ h3 {
   align-items: center;
   gap: 9px;
 }
+.toolbar-left {
+  min-width: 0;
+  flex: 1;
+}
+.toolbar-right {
+  flex: none;
+}
+.setup-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #65727a;
+}
 .animation-label {
   margin-right: 2px;
   white-space: nowrap;
@@ -897,6 +912,7 @@ dialog::backdrop {
   }
   .toolbar-left {
     width: 100%;
+    flex: auto;
     justify-content: space-between;
   }
   .toolbar-right {
