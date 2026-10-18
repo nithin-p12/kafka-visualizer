@@ -24,7 +24,10 @@ public class SimulationController {
     }
     @PostMapping("/commands") public Map<String, Object> command(@RequestBody SimulationEngine.Command command) { engine.command(command); return engine.snapshot(0); }
     @GetMapping("/scenarios") public List<Scenarios.Scenario> scenarios() { return Scenarios.ALL; }
-    @PostMapping("/scenarios/{id}") public Map<String, Object> scenario(@PathVariable int id) { engine.scenario(id); return engine.snapshot(0); }
+    public record GuideStart(Boolean guided) {}
+    public record CustomStart(com.kafka.visualizer.simulation.Configuration configuration, Long configRevision, Boolean guided) {}
+    @PostMapping("/scenarios/{id}") public Map<String, Object> scenario(@PathVariable int id, @RequestBody(required=false) GuideStart request) { engine.scenario(id,request!=null && Boolean.TRUE.equals(request.guided())); return engine.snapshot(0); }
+    @PostMapping("/run") public Map<String,Object> run(@RequestBody CustomStart request) { engine.runCustom(request.configuration(),request.configRevision(),Boolean.TRUE.equals(request.guided())); return engine.snapshot(0); }
     @GetMapping("/partitions/{topicId}/{partitionId}/history") public Map<String, Object> history(@PathVariable String topicId, @PathVariable int partitionId,
             @RequestParam(required = false) String brokerId, @RequestParam(defaultValue = "0") int page) { return engine.history(topicId, partitionId, brokerId, page); }
     @ExceptionHandler(SimulationException.class) public ResponseEntity<Map<String, Object>> invalid(SimulationException e) {

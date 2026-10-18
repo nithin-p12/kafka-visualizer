@@ -1,6 +1,7 @@
-import { partitionColor } from "./diagram-layout.js";
+import { partitionColor } from "./diagram-layout.js?v=20261018-2";
 const ns = "http://www.w3.org/2000/svg";
 const DURATIONS = {
+  ASSIGNMENT: 950,
   PRODUCED: 850,
   REPLICATED: 750,
   DELIVERED: 1100,
@@ -31,6 +32,8 @@ export class Replay {
     this.completed = new Map();
     this.partitionTails = new Map();
     this.replicaTails = new Map();
+    this.assignmentTails = new Map();
+    this.consumerAssignmentTails = new Map();
     this.step = false;
     this.obsolete = 0;
     this.finished = 0;
@@ -51,6 +54,8 @@ export class Replay {
     this.completed.clear();
     this.partitionTails.clear();
     this.replicaTails.clear();
+    this.assignmentTails.clear();
+    this.consumerAssignmentTails.clear();
     this.clock = 0;
     this.previous = performance.now();
     this.step = false;
@@ -81,8 +86,14 @@ export class Replay {
       meta = this.pipelines.get(key) || { replicas: [], deliveries: new Map() };
     const deliveryKey = event.groupId + "|" + event.generation;
     let dependencies = [];
+    if (event.stage === "ASSIGNMENT") {
+      const owner = event.groupId + "|" + event.destination;
+      dependencies = [this.consumerAssignmentTails.get(owner)].filter(Boolean);
+      this.consumerAssignmentTails.set(owner, event.id);
+      this.assignmentTails.set(event.groupId + "|" + event.partitionKey, event.id);
+    }
     if (event.stage === "PRODUCED")
-      dependencies = [this.partitionTails.get(event.partitionKey)].filter(
+      dependencies = [...this.assignmentTails.values(), this.partitionTails.get(event.partitionKey)].filter(
         Boolean,
       );
     if (event.stage === "REPLICATED")
@@ -95,6 +106,7 @@ export class Replay {
     if (event.stage === "DELIVERED")
       dependencies = [
         meta.ack || meta.produced,
+        this.assignmentTails.get(event.groupId + "|" + event.partitionKey),
         ...(!meta.ack ? meta.replicas : []),
       ].filter(Boolean);
     if (
@@ -165,6 +177,8 @@ export class Replay {
       ...this.completed.values(),
       ...this.partitionTails.values(),
       ...this.replicaTails.values(),
+      ...this.assignmentTails.values(),
+      ...this.consumerAssignmentTails.values(),
     ]);
     for (const job of [...this.queue, ...this.active])
       job.dependencies.forEach((id) => needed.add(id));
@@ -248,7 +262,9 @@ export class Replay {
     text.setAttribute("fill", "white");
     text.setAttribute("y", "1");
     text.textContent =
-      e.stage === "COMMITTED"
+      e.stage === "ASSIGNMENT"
+        ? "P" + e.partitionKey.split(":")[1] + " → " + e.destinationName
+        : e.stage === "COMMITTED"
         ? "✓ " + e.committedNext
         : e.stage === "RETRY"
           ? "↻ " + e.messageId
@@ -256,16 +272,17 @@ export class Replay {
             ? "× " + (e.messageId || "error")
             : e.messageId;
     if (text.textContent.length > 6) text.style.fontSize = "13px";
+    if (e.stage === "ASSIGNMENT") text.textContent = "Assign P" + e.partitionKey.split(":")[1];
     const title = document.createElementNS(ns, "title");
     title.textContent = e.description;
     g.append(rect, text, title);
     document.getElementById("packets").append(g);
     return g;
   }
-  frame(now, running) {
+  frame(now, running, held = false) {
     const delta = Math.max(0, Math.min(100, now - this.previous));
     this.previous = now;
-    const advancing = running || this.step;
+    const advancing = !held && (running || this.step);
     if (advancing) {
       this.clock += delta * this.speed;
       for (const job of [...this.queue]) {
@@ -277,6 +294,14 @@ export class Replay {
           continue;
         }
         const e = job.event;
+        // Completion is a timed state change in the existing consumer tile, not a second delivery.
+        if (e.stage === "PROCESSED") {
+          this.queue.splice(this.queue.indexOf(job), 1);
+          this.callbacks.start?.(e);
+          job.local = true;
+          this.active.push(job);
+          continue;
+        }
         job.route = this.diagram.route(
           e.destination ? e : { ...e, destination: e.source },
         );
@@ -288,7 +313,7 @@ export class Replay {
         }
         if (
           this.active.length >= 8 ||
-          this.active.some((j) => this.routesConflict(j.route, job.route))
+          this.active.some((j) => !j.local && this.routesConflict(j.route, job.route))
         )
           continue;
         this.queue.splice(this.queue.indexOf(job), 1);
@@ -301,6 +326,12 @@ export class Replay {
       }
     }
     this.active = this.active.filter((job) => {
+      if (job.local) {
+        if (advancing) job.elapsed += delta * this.speed;
+        if (job.elapsed < job.duration) return true;
+        this.finish(job);
+        return false;
+      }
       const route = this.diagram.route(
         job.event.destination
           ? job.event

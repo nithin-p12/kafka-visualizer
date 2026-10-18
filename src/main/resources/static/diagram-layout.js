@@ -248,7 +248,7 @@ export function routePoints(layout, event) {
       [brokerX - 18, b.cy],
       [b.cx - 20, b.cy],
     ];
-  if (event.stage === "DELIVERED") {
+  if (event.stage === "DELIVERED" || event.stage === "ASSIGNMENT") {
     const lane = brokerX + brokerWidth + 32;
     const entryX = consumerX - 43;
     // Include packet size, not only the thin line, when clearing group labels.
@@ -299,13 +299,6 @@ export function routePoints(layout, event) {
       [consumerX - 44, layout.height - 66],
       [b.cx, layout.height - 66],
       [b.cx, b.cy - 15],
-    ];
-  if (event.stage === "PROCESSED")
-    return [
-      [a.cx - 20, a.cy],
-      [a.cx - 35, a.cy],
-      [a.cx - 35, b.cy],
-      [b.cx, b.cy],
     ];
   if (event.stage === "RETRY")
     return [

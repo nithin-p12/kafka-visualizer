@@ -15,6 +15,8 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':
   page.on('pageerror', e => report.errors.push(e.message));
   page.on('response', r => { if (r.status() >= 500) report.errors.push(r.status() + ' ' + r.url()); });
   await page.addInitScript(() => {
+    localStorage.setItem('kafka-welcome-v1','done');
+    localStorage.setItem('kafka-guide-enabled','false');
     localStorage.removeItem('kafka-view');
     window.audit = { packets: [], geometry: [], arrivals: [], lastEpoch: null };
     new MutationObserver(records => records.forEach(r => r.addedNodes.forEach(n => {
@@ -70,6 +72,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':
     await page.locator('#scenarios-tab').click();
     await page.selectOption('#scenario-select', String(id));
     await page.locator('#run-scenario').click();
+    await page.locator('#learning-continue').click();
     await ready(n => window.kafkaLab.state.scenarioId === n, id);
     if (await page.locator('#sidebar').isVisible()) await page.locator('#close-sidebar').click();
   }

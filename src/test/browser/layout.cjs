@@ -142,6 +142,7 @@ test("event routes terminate at actual sources and destinations and use routing 
     y: destination.cy,
   });
   assert.equal(routePoints(l, { ...event, destination: "missing" }), null);
+  assert.equal(routePoints(l, { stage: "PROCESSED", source: "consumer:c00", destination: "complete:c00" }), null, "Processing completion has no outgoing/re-entry route");
 });
 test("delivery uses available lower space instead of detouring over a group", async () => {
   const { routePoints } = await load();

@@ -1,9 +1,11 @@
-import { Diagram, esc } from "./diagram.js";
-import { Replay } from "./replay.js";
-import { Presentation } from "./presentation.js";
+import { Diagram, esc } from "./diagram.js?v=20261018-2";
+import { Replay } from "./replay.js?v=20261018-2";
+import { Presentation } from "./presentation.js?v=20261018-2";
+import { Guidance, setupExplanation } from "./guidance.js?v=20261018-2";
 const $ = (id) => document.getElementById(id),
   clone = (x) => structuredClone(x);
 const stages = {
+  ASSIGNMENT: "⇢ Assigned partition",
   PRODUCED: "→ Produced",
   REPLICATED: "⇢ Replicated",
   ACKNOWLEDGED: "✓ Acknowledged",
@@ -55,6 +57,7 @@ const diagram = new Diagram($("architecture"), $("architecture-viewport")),
     },
     finish: (e) => {
       presentation.finish(e);
+      guide.finish(e);
       visualDirty = true;
     },
     cancel: () => {
@@ -78,6 +81,7 @@ function saveView() {
     localStorage.setItem("kafka-view", JSON.stringify(view));
   } catch {}
 }
+const guide = new Guidance({ getState: () => state, command, showSidebar, selectTab, focusView, diagnostics, closeMore });
 function notice(message, error = false) {
   $("notice").textContent = message;
   $("notice").classList.toggle("error", error);
@@ -185,6 +189,7 @@ function receive(next) {
     if (!seed) {
       presentation.announce(event);
       replay.enqueue(event);
+      guide.observe(event);
     }
   }
   if (next.playbackPaused && !pendingStep) replay.step = false;
@@ -283,8 +288,9 @@ function render() {
   updateSliders();
   updateModes();
   $("playback").textContent =
-    state.canAdvance || (!replay.idle && replay.step) ? "Ⅱ Pause" : "▶ Resume";
-  $("step").disabled = state.canAdvance || pendingStep;
+    state.guideCue && replay.idle ? "Guide paused" : state.canAdvance || (!replay.idle && replay.step) ? "Ⅱ Pause" : "▶ Resume";
+  $("step").disabled = state.canAdvance || pendingStep || !!state.guideCue;
+  $("playback").disabled = !!state.guideCue && replay.idle;
   const c = state.configuration,
     factors = c.topics.map((t) => t.replicationFactor);
   const rf =
@@ -909,6 +915,13 @@ $("component-buttons").onclick = (e) => {
 $("close-component").onclick = () => $("component-actions").close();
 $("playback").onclick = togglePlayback;
 $("reset").onclick = () => command("RESET");
+$("run-custom").onclick = () => {
+  const configuration = clone(draft), revision = draftBaseRevision;
+  guide.intro('Your custom Kafka setup', setupExplanation(configuration), guided => action(async () => {
+    const next = await api('/run', { method: 'POST', body: JSON.stringify({ configuration, configRevision: revision, guided }) });
+    dirty=false; configEditorRevision=-1; receive(next); showSidebar(false);
+  }));
+};
 $("step").onclick = () => {
   closeMore();
   pendingStep = true;
@@ -1045,17 +1058,15 @@ $("scenario-select").onchange = () => {
     scenarios.find((s) => s.id === Number($("scenario-select").value))
       ?.explanation || "";
 };
-$("run-scenario").onclick = () =>
-  action(async () => {
-    const next = await api("/scenarios/" + $("scenario-select").value, {
-      method: "POST",
-    });
-    dirty = false;
-    configEditorRevision = -1;
-    receive(next);
-    showSidebar(false);
-    notice("Scenario started; previous messages and offsets reset.");
-  });
+$("run-scenario").onclick = () => {
+  const id = Number($("scenario-select").value), scenario=scenarios.find(s=>s.id===id);
+  guide.intro('Scenario ' + id + ': ' + scenario.name,
+    `<p>${esc(scenario.explanation)}</p><p class="guide-note">First watch partition-colored assignment packets identify each consumer's ownership. Then follow the message packets. Important learning checkpoints pause until you click Continue. This starts a fresh scenario and resets messages and offsets.</p>`,
+    guided => action(async () => {
+      const next = await api('/scenarios/' + id, { method:'POST', body:JSON.stringify({guided}) });
+      dirty=false; configEditorRevision=-1; receive(next); showSidebar(false);
+    }));
+};
 document.addEventListener("keydown", (e) => {
   if (e.defaultPrevented) return;
   if (document.querySelector("dialog[open]")) return;
@@ -1142,6 +1153,7 @@ async function claimPlayback() {
 async function drive(now) {
   if (
     !state ||
+    guide.blocked ||
     !ownsPlayback ||
     playbackBusy ||
     !replay.idle ||
@@ -1173,7 +1185,7 @@ async function drive(now) {
 }
 function frame(now) {
   const wasIdle = replay.idle;
-  replay.frame(now, !!state?.canAdvance);
+  replay.frame(now, !!state?.canAdvance, guide.blocked);
   if (!wasIdle && replay.idle) {
     presentation.settle();
     visualDirty = true;
@@ -1183,14 +1195,17 @@ function frame(now) {
     renderArchitecture();
     if (!$("bottom-panel").hidden) renderPanel();
     updateModes();
-    $("step").disabled = state.canAdvance || pendingStep;
+    $("step").disabled = state.canAdvance || pendingStep || !!state.guideCue;
+    $("playback").disabled = !!state.guideCue && replay.idle;
     $("playback").textContent =
-      state.canAdvance || (!replay.idle && replay.step)
+      state.guideCue && replay.idle ? "Guide paused" : state.canAdvance || (!replay.idle && replay.step)
         ? "Ⅱ Pause"
         : "▶ Resume";
   }
+  if (state) guide.update(state, replay.idle, ownsPlayback, diagram.state);
+  guide.frame(now);
   drive(now);
-  if (pendingStep && replay.idle && !stepRequestBusy) {
+  if (pendingStep && replay.idle && !stepRequestBusy && !guide.blocked && !state?.guideCue) {
     stepRequestBusy = true;
     command("STEP").finally(() => {
       pendingStep = false;
@@ -1205,6 +1220,7 @@ setInterval(poll, 150);
 setInterval(claimPlayback, 2500);
 requestAnimationFrame(frame);
 window.kafkaLab = {
+  get guidance() { return { enabled:guide.enabled, blocked:guide.blocked, checkpoint:guide.current?.checkpoint ? guide.current.key : null }; },
   get state() {
     return state;
   },
@@ -1227,3 +1243,4 @@ window.kafkaLab = {
     return ownsPlayback;
   },
 };
+guide.welcomeIfNeeded();

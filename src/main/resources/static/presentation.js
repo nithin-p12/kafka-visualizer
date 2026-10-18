@@ -44,6 +44,7 @@ export class Presentation {
             redeliveries: 0,
             fetched: new Map(),
             completed: new Map(),
+            owned: new Set(),
           });
         const w = this.workers.get(c.id);
         if (changed || !c.online) {
@@ -51,9 +52,11 @@ export class Presentation {
           w.failed = false;
           w.fetched.clear();
           w.completed.clear();
+          w.owned.clear();
         }
         if (seed)
           Object.assign(w, {
+            owned: new Set(c.assignments),
             processing: c.processing,
             successes: c.successes,
             retries: c.retries,
@@ -119,9 +122,10 @@ export class Presentation {
       }
     }
     const id =
-        e.stage === "DELIVERED" ? e.destination.slice(9) : e.source?.slice(9),
+        ["DELIVERED", "ASSIGNMENT"].includes(e.stage) ? e.destination.slice(9) : e.source?.slice(9),
       w = this.workers.get(id);
     if (w) {
+      if (e.stage === "ASSIGNMENT") w.owned.add(e.partitionKey);
       if (e.stage === "DELIVERED") {
         w.processing = {
           message: e.message,
@@ -164,6 +168,7 @@ export class Presentation {
     for (const g of this.raw.groups) {
       for (const c of g.consumers)
         Object.assign(this.workers.get(c.id), {
+          owned: new Set(c.assignments),
           processing: c.processing,
           successes: c.successes,
           retries: c.retries,
@@ -203,10 +208,12 @@ export class Presentation {
     for (const g of state.groups) {
       for (const c of g.consumers) {
         const w = this.workers.get(c.id);
+        const assignmentCount = c.assignments.length;
         const processing = w.processing ? structuredClone(w.processing) : null;
         if (processing && c.processing?.message.id === processing.message.id)
           processing.progress = c.processing.progress;
         Object.assign(c, {
+          assignments: [...w.owned],
           processing,
           successes: w.successes,
           retries: w.retries,
@@ -217,9 +224,9 @@ export class Presentation {
             ? w.failed
               ? "FAILED"
               : "PROCESSING"
-            : c.assignments.length
-              ? "WAITING"
-              : "IDLE";
+            : c.assignments.length < assignmentCount
+              ? "ASSIGNING"
+              : c.assignments.length ? "WAITING" : "IDLE";
       }
       for (const o of g.offsets) {
         const w = this.workers.get(o.ownerId),
@@ -235,6 +242,10 @@ export class Presentation {
         o.lag = Math.max(0, o.logEnd - (o.committedNext || 0));
       }
       g.lag = g.offsets.reduce((sum, o) => sum + o.lag, 0);
+      // Attribute committed-offset lag only to partitions whose ownership has visibly arrived.
+      for (const c of g.consumers)
+        c.lag = g.offsets.filter(o => o.ownerId === c.id && c.assignments.includes(o.key))
+          .reduce((sum, o) => sum + o.lag, 0);
     }
     state.producerQueues = (state.producerQueues || []).map((q) => ({
       ...q,

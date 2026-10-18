@@ -19,17 +19,23 @@ fs.mkdirSync(out, { recursive: true });
       errors.push(m.text());
   });
   await page.addInitScript(() => {
+    localStorage.setItem('kafka-welcome-v1','done');
+    localStorage.setItem('kafka-guide-enabled','false');
     localStorage.removeItem("kafka-view");
     window.observedStages = new Set();
+    window.completedInPlace = false;
     document.addEventListener("DOMContentLoaded", () =>
       new MutationObserver((records) =>
-        records.forEach((r) =>
+        records.forEach((r) => {
+          if (r.type === "attributes" && r.target.matches('.consumer-node .message-tile[data-status="processed"]'))
+            window.completedInPlace = true;
           r.addedNodes.forEach((n) => {
+            if (n.nodeType === 1 && n.matches('.consumer-node .message-tile[data-status="processed"]')) window.completedInPlace = true;
             if (n.nodeType === 1 && n.matches(".packet"))
               window.observedStages.add(n.dataset.stage);
-          }),
-        ),
-      ).observe(document.body, { subtree: true, childList: true }),
+          });
+        }),
+      ).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-status"] }),
     );
   });
   async function req(path, data, method = "POST") {
@@ -165,6 +171,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.locator("#more-toggle").click();
     await page.locator("#step").click();
     await ready(() => window.kafkaLab.state.tick === 1);
+    await ready(() => window.kafkaLab.playback.idle);
     assert.equal(await page.locator(".broker").count(), 3);
     assert.equal(await page.locator(".replica").count(), 6);
     assert.equal(await page.locator(".group-box").count(), 3);
@@ -185,7 +192,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.locator("#playback").click();
     await ready(() => window.kafkaLab.state.running);
     await ready(() =>
-      ["PRODUCED", "REPLICATED", "DELIVERED", "PROCESSED", "COMMITTED"].every(
+      window.completedInPlace && ["PRODUCED", "REPLICATED", "DELIVERED", "COMMITTED"].every(
         (s) => window.observedStages.has(s),
       ),
     );
@@ -442,6 +449,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.locator("#scenarios-tab").click();
     await page.selectOption("#scenario-select", "6");
     await page.locator("#run-scenario").click();
+    await page.locator('#learning-continue').click();
     await ready(() => window.kafkaLab.state.scenarioPhase === 3);
     assert(
       await page.evaluate(
@@ -452,6 +460,7 @@ fs.mkdirSync(out, { recursive: true });
     await page.locator("#scenarios-tab").click();
     await page.selectOption("#scenario-select", "10");
     await page.locator("#run-scenario").click();
+    await page.locator('#learning-continue').click();
     await ready(
       () => window.kafkaLab.state.configuration.consumers.length === 3,
     );

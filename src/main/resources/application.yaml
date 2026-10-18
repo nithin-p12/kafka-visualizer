@@ -1,6 +1,11 @@
 spring:
   application:
     name: kafka-visualizer
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-store: true
 server:
   address: 127.0.0.1
   port: 8080

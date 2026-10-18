@@ -12,6 +12,7 @@ public final class SimulationEngine {
                         String sourceName, String destinationName, Long offset, Long committedNext,
                         long generation, String description, Message message) {}
     public record PendingMessage(String id, String key, String payload, boolean requested, String status) {}
+    public record GuideCue(String key, String token, String title, String description, List<String> targets, String tone) {}
     private static final class Pending {
         final String id;
         String key, payload, status = "Ready template";
@@ -80,6 +81,9 @@ public final class SimulationEngine {
     private int scenario, scenarioPhase;
     private String scenarioBroker;
     private long scenarioActionTick;
+    private boolean guided;
+    private GuideCue guideCue;
+    private final Set<String> guideSeen = new HashSet<>();
 
     public SimulationEngine() { configuration = Configuration.defaults(); reset(); }
     public synchronized Configuration configuration() { return configuration; }
@@ -145,6 +149,7 @@ public final class SimulationEngine {
         if (resetNeeded && !resetAllowed) throw new SimulationException("This change requires a reset of messages and offsets.", true);
         var old = configuration;
         scenario = scenarioPhase = 0;
+        guideCue = null;
         // Defensive collection copies: callers cannot mutate the active configuration after validation.
         configuration = new Configuration(1, List.copyOf(next.brokers()), List.copyOf(next.topics()), List.copyOf(next.producers()),
                 List.copyOf(next.groups()), next.consumers().stream().map(c -> new Configuration.Consumer(c.id(), c.name(), c.groupId(), List.copyOf(c.topicIds()), c.rate())).toList(),
@@ -179,6 +184,7 @@ public final class SimulationEngine {
     public synchronized void reset() {
         running = false; tick = messageSequence = 0; epoch++; revision++;
         scenarioPhase = 0; scenarioBroker = null;
+        guideCue = null; guideSeen.clear();
         reservedSequence=0; pending.clear(); manualTargets.clear(); manualBurst=manualSuspended=false; playbackPaused=true; manualStatus="";
         brokers.clear(); partitions.clear(); consumers.clear(); groups.clear(); producerCredit.clear(); roundRobin.clear(); events.clear();
         configuration.brokers().forEach(b -> brokers.put(b.id(), true));
@@ -208,7 +214,13 @@ public final class SimulationEngine {
         switch (command.type()) {
             case "START", "RESUME" -> { playbackPaused=false; if (manualBurst) manualSuspended=false; else running = true; }
             case "PAUSE" -> { playbackPaused=true; running = false; if (manualBurst) manualSuspended=true; }
-            case "STEP" -> { if (running) throw new SimulationException("Pause before stepping.", true); playbackPaused=false; advance(); }
+            case "STEP" -> { if (guideCue != null) throw new SimulationException("Continue the guide before stepping.", true); if (running) throw new SimulationException("Pause before stepping.", true); playbackPaused=false; advance(); }
+            case "GUIDE_CONTINUE" -> {
+                if (guideCue == null || !guideCue.token().equals(command.targetId())) throw new SimulationException("This guide checkpoint has changed.", true);
+                guideCue = null;
+            }
+            case "GUIDE_ENABLE" -> guided = true;
+            case "GUIDE_DISABLE" -> { guided = false; guideCue = null; }
             case "RESET" -> {
                 if(scenario>0) {
                     int selected=scenario; apply(scenarioConfiguration(selected),true,null); scenario=selected;
@@ -244,15 +256,16 @@ public final class SimulationEngine {
         revision++;
     }
     public synchronized void advanceIfRunning() { if (shouldAdvance()) advance(); }
-    public synchronized boolean shouldAdvance() { return running || (manualBurst && !manualSuspended && manualRunnable()); }
+    public synchronized boolean shouldAdvance() { return guideCue == null && (running || (manualBurst && !manualSuspended && manualRunnable())); }
     public synchronized void pacedAdvance(long expectedEpoch, long expectedTick, long completedEventId) {
         if (expectedEpoch != epoch || expectedTick != tick || completedEventId < eventSequence)
             throw new SimulationException("Playback state changed; refresh before advancing.", true);
         if (shouldAdvance()) advance();
     }
     public synchronized void advance() {
+        if (guideCue != null) return;
         tick++;
-        scenarioActions();
+        if (scenarioActions()) { revision++; return; }
         for (var p : partitions.values()) {
             elect(p);
             if (p.leader == null) continue;
@@ -263,6 +276,11 @@ public final class SimulationEngine {
             }
         }
         completeRebalances();
+        // Present initial ownership before even a maximum-rate producer can publish.
+        if (guided && tick==1 && Set.of(0,2,3,4).contains(scenario)) {
+            guideMilestones();
+            if (guideCue!=null) { revision++; return; }
+        }
         dispatchRequested();
         for (var producer : configuration.producers()) if (producer.automatic() && !manualBurst) {
             int credit = producerCredit.getOrDefault(producer.id(), 0) + (int)Math.round(producer.rate() * 4);
@@ -271,7 +289,7 @@ public final class SimulationEngine {
         }
         for (var c : configuration.consumers()) process(c);
         if (configuration.autoCommit() && tick % configuration.commitIntervalTicks() == 0) configuration.consumers().forEach(this::commit);
-        retain(); updateManualFlow(); revision++;
+        retain(); updateManualFlow(); guideMilestones(); revision++;
     }
     private void elect(Partition p) {
         if (p.leader != null && Boolean.TRUE.equals(brokers.get(p.leader)) && p.replicas.get(p.leader).end == p.end) return;
@@ -419,6 +437,8 @@ public final class SimulationEngine {
                 long offset = g.committed.getOrDefault(p.key(), 0L);
                 if (offset < p.start) emit("RETENTION", null, p, entry.getKey(), "", "consumer:" + owner.id(), null, entry.getKey() + " offset " + offset + " expired; resetting fetch position to earliest retained " + p.start);
                 consumers.get(owner.id()).cursors.put(p.key(), new Cursor(Math.max(offset, p.start)));
+                emit("ASSIGNMENT", null, p, entry.getKey(), p.leader == null ? "" : p.node(p.leader), "consumer:" + owner.id(), null,
+                        partitionName(p) + " assigned to " + owner.name() + " in " + entry.getKey() + ". Ownership assignment, not a message delivery.");
             }
             emit("ASSIGNED", null, null, entry.getKey(), "", "", null, entry.getKey() + " rebalance complete: " + g.assignments.size() + " partitions assigned exclusively to subscribed members.");
         }
@@ -495,32 +515,93 @@ public final class SimulationEngine {
     }
 
     public synchronized void scenario(int id) {
+        scenario(id, false);
+    }
+    public synchronized void scenario(int id, boolean withGuide) {
         var next = scenarioConfiguration(id);
-        apply(next, true, null); scenario = id; running = true; playbackPaused=false;
+        apply(next, true, null); scenario = id; guided=withGuide; running = true; playbackPaused=false;
         emit("SCENARIO", null, null, "", "", "", null, Scenarios.ALL.get(id - 1).explanation());
+    }
+    public synchronized void runCustom(Configuration next, Long expectedRevision, boolean withGuide) {
+        apply(next, true, expectedRevision); guided=withGuide; running=true; playbackPaused=false;
     }
     private Configuration scenarioConfiguration(int id) {
         var next=Scenarios.configuration(id);
         return id==6?new Configuration(1,next.brokers(),next.topics(),next.producers(),next.groups(),next.consumers(),600,50,true):next;
     }
-    private void scenarioActions() {
+    private boolean scenarioActions() {
         if (scenario == 6) {
             var state = consumers.get("c1");
             if (scenarioPhase == 0 && state.successes > 0) {
+                if (guide("before-crash", "A consumer is about to crash", consumer("c1").name()+" has completed work but has not committed its next offset. Continue to crash it; watch the same record return after restart.", List.of("consumer:c1"), "danger")) return true;
                 command(new Command("CONSUMER_STOP", "c1", null, null, null)); scenarioPhase = 1; scenarioActionTick = tick;
             } else if (scenarioPhase == 1 && tick >= scenarioActionTick + 10) {
+                if (guide("before-restart", "Restart and watch for redelivery", consumer("c1").name()+" will rejoin its group and resume from the committed offset. Its earlier completion was not a commit.", List.of("consumer:c1"), "retry")) return true;
                 command(new Command("CONSUMER_RESTART", "c1", null, null, null)); scenarioPhase = 2;
-            } else if (scenarioPhase == 2 && state.redeliveries > 0 && state.work == null) { scenarioPhase = 3; running = false; }
+            } else if (scenarioPhase == 2 && state.redeliveries > 0 && state.work == null) {
+                scenarioPhase = 3; running = false;
+                if (guide("redelivery-done", "The same record was processed again", consumer("c1").name()+" now has "+state.redeliveries+" redelivery. The duplicate in its history demonstrates why a consumer group alone does not ensure exactly-once business processing. This demonstration is complete and remains paused.", List.of("consumer:c1"), "retry")) return true;
+            }
         } else if (scenario == 7 && scenarioPhase == 0 && partitions.values().stream().anyMatch(p -> p.end > 0)) {
-            scenarioBroker = partitions.values().stream().filter(p -> p.end > 0).findFirst().orElseThrow().leader;
+            var p=partitions.values().stream().filter(x -> x.end > 0).findFirst().orElseThrow();
+            scenarioBroker = p.leader;
+            if (guide("before-failover", "A leader broker is about to stop", brokerName(scenarioBroker)+" leads "+partitionName(p)+". The first record is acknowledged and replicated. Continue to stop this broker; watch an eligible in-sync follower take over.", List.of("broker:"+scenarioBroker,p.node(scenarioBroker)), "danger")) return true;
             command(new Command("BROKER_STOP", scenarioBroker, null, null, null)); scenarioPhase = 1;
         } else if (scenario == 10 && scenarioPhase == 0 && consumers.values().stream().anyMatch(c -> c.successes >= 2)) {
+            if (guide("before-join", "A new consumer is about to join", "ResultsService-3 will join results-group. Current ownership will be revoked, then the three partitions will be divided among three consumers. Uncommitted work can be redelivered.", List.of("group:results-group","consumer:c1","consumer:c2"), "guide")) return true;
             var list = new ArrayList<>(configuration.consumers());
             list.add(new Configuration.Consumer("c3", "ResultsService-3", "results-group", List.of("t1"), 1));
             int activeScenario=scenario;
             apply(new Configuration(1, configuration.brokers(), configuration.topics(), configuration.producers(), configuration.groups(), list,
                     configuration.commitIntervalTicks(), configuration.retentionLimit(), configuration.autoCommit()), false, null); scenario=activeScenario; scenarioPhase = 1;
         }
+        return false;
+    }
+
+    private boolean guide(String key, String title, String description, List<String> targets, String tone) {
+        if (!guided || guideCue != null || !guideSeen.add(key)) return false;
+        guideCue=new GuideCue(key,epoch+":"+key,title,description,List.copyOf(targets),tone);
+        emit("GUIDE",null,null,"","","",null,title+": "+description);
+        return true;
+    }
+    private List<String> consumerTargets() {
+        return configuration.consumers().stream().map(c -> "consumer:"+c.id()).toList();
+    }
+    private void guideMilestones() {
+        if (!guided || guideCue != null) return;
+        if (scenario==7 && scenarioPhase==1) {
+            var p=partitions.values().stream().filter(x -> x.end>0 && x.leader!=null).findFirst().orElseThrow();
+            guide("failover-done","A new leader is serving the partition",brokerName(p.leader)+" now leads "+partitionName(p)+". The acknowledged record is still stored. The stopped broker remains offline; subsequent traffic uses the surviving leader. Continue to observe more messages.",List.of("broker:"+p.leader,p.node(p.leader)),"success");
+        } else if (scenario==10 && scenarioPhase==1 && groups.values().stream().noneMatch(g -> g.rebalanceTicks>0)) {
+            guide("join-done","Rebalance complete: one partition each","ResultsService-3 has joined. The assignment animation shows each partition's new owner. All three consumers can now work in parallel; replication did not add this parallelism.",consumerTargets(),"success");
+        } else if ((scenario==0 || scenario==2 || scenario==3 || scenario==4) && tick==1) {
+            var idle=configuration.consumers().stream().filter(c -> consumers.get(c.id()).cursors.isEmpty()).map(c -> "consumer:"+c.id()).toList();
+            String text = switch(scenario) {
+                case 2 -> "Each consumer owns one partition. The purple assignment packets represent ownership, not Kafka records. Continue to watch production and delivery.";
+                case 3 -> "Three partitions have three owners. Two extra consumers have no partition and remain idle; adding consumers beyond partition count does not increase parallelism.";
+                case 4 -> "One consumer owns two partitions, the other owns one. A single consumer shares its processing speed across its assigned partitions.";
+                default -> groups.values().stream().allMatch(g -> g.assignments.isEmpty())
+                        ? "No partition has an eligible subscribed consumer. Check topic subscriptions and online members. Published records can remain stored without being consumed."
+                        : "Partition ownership has been assigned within each subscribed group. The assignment packets represent ownership, not messages. Different groups have independent assignments and offsets. Continue to observe your configured producers and consumers.";
+            };
+            guide("initial-assignment","See which consumer owns each partition",text,idle.isEmpty()?consumerTargets():idle,"guide");
+        } else if (scenario==1 && groups.values().stream().anyMatch(g -> !g.committed.isEmpty())) {
+            long next=groups.values().iterator().next().committed.values().iterator().next();
+            guide("first-commit","Processing and committing are different","The group committed next offset "+next+". This is where it will resume, not the offset of its last record. Consuming did not delete the partition log. Continue to watch the cycle repeat.",consumerTargets(),"success");
+        } else if (scenario==5 && consumers.values().stream().allMatch(c -> c.successes>0)) {
+            guide("independent-groups","Every group received its own delivery","Find the same message ID in each group's consumer history. Groups independently consume the topic and track their own committed offsets; the group markers are logical memberships, not servers.",consumerTargets(),"success");
+        } else if ((scenario==8 || scenario==0) && groups.entrySet().stream().anyMatch(e -> lag(e.getValue())>=20)) {
+            var entry=groups.entrySet().stream().filter(e -> lag(e.getValue())>=20).findFirst().orElseThrow();
+            guide("lag-threshold","Consumer lag is growing",entry.getKey()+" has lag "+lag(entry.getValue())+" records (log end minus committed next offset). Processing/commit throughput is behind publication. Continue, then try a faster consumer or a slower producer.",List.of("group:"+entry.getKey()),"warning");
+        } else if (scenario==9 && partitions.values().stream().anyMatch(p -> p.end>=3)) {
+            var p=partitions.values().stream().filter(x -> x.end>=3).findFirst().orElseThrow();
+            guide("key-affinity","The same key keeps choosing this partition","The key execution-42 selected "+partitionName(p)+" for the first three records, with offsets 0, 1 and 2. Ordering is within this partition, not across all partitions. Continue to see the affinity repeat.",List.of("producer:p1",p.node(p.leader)),"guide");
+        }
+    }
+    private long lag(Group group) {
+        String id=groups.entrySet().stream().filter(e -> e.getValue()==group).map(Map.Entry::getKey).findFirst().orElse("");
+        var topics=configuration.consumers().stream().filter(c -> c.groupId().equals(id)).flatMap(c -> c.topicIds().stream()).collect(java.util.stream.Collectors.toSet());
+        return partitions.values().stream().filter(p -> topics.contains(p.topicId)).mapToLong(p -> p.end-group.committed.getOrDefault(p.key(),0L)).sum();
     }
 
     private Configuration.Topic topic(String id) { return configuration.topics().stream().filter(t -> t.id().equals(id)).findFirst().orElseThrow(() -> new SimulationException("Unknown topic")); }
@@ -582,6 +663,7 @@ public final class SimulationEngine {
                 "running", running, "configuration", configuration, "brokers", brokerViews, "groups", groupViews,
                 "events", eventList, "latestEventId", eventSequence, "eventGap", !events.isEmpty() && afterEventId > 0 && afterEventId < events.getFirst().id() - 1,
                 "scenarioId", scenario, "scenarioPhase", scenarioPhase, "messageCount", messageSequence,
+                "guided",guided,"guideCue",guideCue,
                 "producerQueues",configuration.producers().stream().map(p -> map("producerId",p.id(),"messages",pending.get(p.id()).stream().map(Pending::view).toList())).toList(),
                 "manualFlow",manualBurst, "manualSuspended",manualSuspended, "canAdvance",shouldAdvance(), "manualStatus",manualStatus,"playbackPaused",playbackPaused);
     }

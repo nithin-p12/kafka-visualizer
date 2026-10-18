@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="application-name" content="Kafka Visualizer" />
     <title>Kafka Visualization</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20261018-2" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
@@ -47,6 +47,8 @@
       </div>
       <div id="more-menu" class="more-menu" hidden>
         <button id="step">▸ Step one tick</button
+        ><button id="welcome-guide">Welcome guide</button
+        ><label class="guide-toggle"><input id="guidance-enabled" type="checkbox" checked /> Guide during runs</label
         ><button id="toggle-diagnostics">Show diagnostics</button
         ><button id="toggle-legend">Show legend</button
         ><button id="rebalance">⇄ Rebalance all groups</button
@@ -90,6 +92,7 @@
             <button id="apply" class="primary">Apply Configuration</button
             ><button id="discard">Discard edits</button>
           </div>
+          <button id="run-custom" class="guide-primary">Run configuration &amp; reset</button>
           <span id="draft-status" class="hint">Live configuration</span>
           <p id="apply-impact" class="hint"></p>
           <div class="file-actions">
@@ -227,7 +230,7 @@
           ><span>● Filled: leader</span><span>○ Outline: follower</span
           ><span>◉ Pulse: processing</span><span>✓ Commit = next offset</span
           ><span class="failure-text">× Failure</span
-          ><span class="retry-text">↻ Retry</span>
+          ><span class="retry-text">↻ Retry</span><span class="failure-text" title="Log end minus committed next, across owned partitions. Includes completed work awaiting commit. Red pulse at 20 records and each additional 20.">Lag ≥ 20: red alert</span>
         </div>
         <div
           id="architecture-viewport"
@@ -298,6 +301,25 @@
       <p id="component-description"></p>
       <div id="component-buttons" class="component-buttons"></div>
     </dialog>
-    <script type="module" src="/app.js"></script>
+    <svg id="guide-overlay" aria-hidden="true"></svg>
+    <dialog id="learning-dialog" aria-labelledby="learning-title" aria-describedby="learning-description">
+      <div class="guide-eyebrow" id="learning-progress">Before you begin</div>
+      <h2 id="learning-title"></h2>
+      <div id="learning-description"></div>
+      <label id="learning-guidance-option"><input id="learning-guidance" type="checkbox" checked /> Guide me during this run</label>
+      <div class="guide-actions">
+        <button id="learning-previous">Previous</button>
+        <button id="learning-skip">Skip</button>
+        <button id="learning-cancel">Cancel</button>
+        <button id="learning-continue" class="guide-primary">Continue</button>
+      </div>
+    </dialog>
+    <aside id="scenario-guide" class="scenario-guide" aria-labelledby="scenario-guide-title" aria-live="polite" hidden>
+      <div class="guide-eyebrow" id="scenario-guide-label">Scenario guide · paused for observation</div>
+      <h2 id="scenario-guide-title"></h2>
+      <p id="scenario-guide-description"></p>
+      <div class="guide-actions"><button id="scenario-guide-disable">Hide guide</button><button id="scenario-guide-continue" class="guide-primary">Continue</button></div>
+    </aside>
+    <script type="module" src="/app.js?v=20261018-2"></script>
   </body>
 </html>

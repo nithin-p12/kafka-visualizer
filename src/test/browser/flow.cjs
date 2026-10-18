@@ -15,19 +15,25 @@ fs.mkdirSync(out, { recursive: true });
     errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.addInitScript(() => {
+    localStorage.setItem('kafka-welcome-v1','done');
+    localStorage.setItem('kafka-guide-enabled','false');
     localStorage.removeItem("kafka-view");
     window.travel = [];
+    window.inPlaceCompleted = new Set();
     new MutationObserver((records) =>
-      records.forEach((r) =>
+      records.forEach((r) => {
+        if (r.type === "attributes" && r.target.matches('.consumer-node .message-tile[data-status="processed"]'))
+          window.inPlaceCompleted.add(r.target.dataset.message);
         r.addedNodes.forEach((n) => {
+          if (n.nodeType === 1 && n.matches('.consumer-node .message-tile[data-status="processed"]')) window.inPlaceCompleted.add(n.dataset.message);
           if (n.nodeType === 1 && n.matches(".packet"))
             window.travel.push({
               id: n.dataset.message,
               stage: n.dataset.stage,
             });
-        }),
-      ),
-    ).observe(document, { subtree: true, childList: true });
+        });
+      }),
+    ).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-status"] });
   });
   async function api(path, data, method = "POST") {
     const r = await page.request.fetch(base + "/api/simulation" + path, {
@@ -171,11 +177,14 @@ fs.mkdirSync(out, { recursive: true });
     );
     const observed = await page.evaluate(() => window.travel);
     for (let n = 1; n <= 28; n++)
-      for (const stage of ["PRODUCED", "DELIVERED", "PROCESSED"])
+      for (const stage of ["PRODUCED", "DELIVERED"])
         assert(
           observed.some((e) => e.id === "M" + n && e.stage === stage),
           "Every message must travel through " + stage + ": M" + n,
         );
+    const completed = await page.evaluate(() => [...window.inPlaceCompleted]);
+    for (let n = 1; n <= 28; n++) assert(completed.includes("M" + n), "Completion stays in place: M" + n);
+    assert(!observed.some(e => e.stage === "PROCESSED"), "Completion must not create another traveling packet");
     assert(
       !(await page.locator(".packet text").allTextContents()).some((t) =>
         /[+×]\d/.test(t),

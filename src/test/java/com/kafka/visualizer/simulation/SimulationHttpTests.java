@@ -21,7 +21,9 @@ class SimulationHttpTests {
     }
     @Test void servesDashboardAndSimulationCommands() throws Exception {
         var home=request("GET","/",null);assertEquals(200,home.statusCode());assertTrue(home.body().contains("Kafka Visualizer"));
-        assertEquals(200,request("GET","/app.js",null).statusCode());
+        var script=request("GET","/app.js?v=20261018-2",null);
+        assertEquals(200,script.statusCode());assertTrue(script.headers().firstValue("Cache-Control").orElse("").contains("no-store"));
+        assertTrue(home.body().contains("/app.js?v="));assertTrue(home.body().contains("/styles.css?v="));
         assertEquals(200,request("POST","/api/simulation/commands","{\"type\":\"RESET\"}").statusCode());
         var result=request("POST","/api/simulation/commands","{\"type\":\"PRODUCE\",\"targetId\":\"p1\",\"key\":\"execution-42\",\"payload\":\"PDF complete\"}");
         assertEquals(200,result.statusCode());assertEquals(0,mapper.readTree(result.body()).get("messageCount").asInt());
@@ -38,5 +40,15 @@ class SimulationHttpTests {
         assertEquals(200,result.statusCode());
         assertEquals(config,mapper.readValue(request("GET","/api/simulation/configuration",null).body(),Configuration.class));
         assertEquals(400,request("PUT","/api/simulation/configuration","{\"configuration\":null}").statusCode());
+    }
+    @Test void guidedScenarioAndCustomStartAreOptionalAndServeLearningAssets() throws Exception {
+        var scenario=request("POST","/api/simulation/scenarios/7","{\"guided\":true}");
+        assertEquals(200,scenario.statusCode());assertTrue(mapper.readTree(scenario.body()).get("guided").asBoolean());
+        String config=mapper.writeValueAsString(Configuration.defaults());
+        var custom=request("POST","/api/simulation/run","{\"configuration\":"+config+",\"guided\":true}");
+        assertEquals(200,custom.statusCode());assertEquals(0,mapper.readTree(custom.body()).get("scenarioId").asInt());
+        assertTrue(mapper.readTree(custom.body()).get("running").asBoolean());
+        assertEquals(200,request("GET","/guidance.js",null).statusCode());
+        assertTrue(request("GET","/",null).body().contains("learning-continue"));
     }
 }

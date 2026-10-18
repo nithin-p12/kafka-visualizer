@@ -4,7 +4,8 @@ import {
   routePoints,
   pathData,
   routeMetric,
-} from "./diagram-layout.js";
+} from "./diagram-layout.js?v=20261018-2";
+export const CONSUMER_LAG_THRESHOLD = 20;
 export const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -54,32 +55,66 @@ function record(
   width,
   message,
   key,
-  { follower = false, processing = false, failed = false } = {},
+  { follower = false, processing = false, failed = false, processed = false } = {},
 ) {
   const color = partitionColor(key);
-  return `<g><title>${esc(message.id)} · offset ${message.offset ?? "—"} · ${esc(message.key || "∅")} · ${esc(message.payload || "")}</title><rect class="record ${processing ? "processing" : ""} ${failed ? "failed" : ""}" x="${x}" y="${y - 14}" width="${width}" height="28" rx="1" fill="${follower ? "#f5f5f5" : color}" stroke="${color}"/><text x="${x + width / 2}" y="${y + 1}" class="record-number" fill="${follower ? color : "white"}">${esc(message.id)}</text></g>`;
+  return `<g class="message-tile" data-message="${esc(message.id)}" data-status="${failed ? "failed" : processing ? "processing" : processed ? "processed" : "stored"}"><title>${processed ? "Processed; retained here. " : processing ? "Processing. " : ""}${esc(message.id)} · offset ${message.offset ?? "—"} · ${esc(message.key || "∅")} · ${esc(message.payload || "")}</title><rect class="record ${processing ? "processing" : ""} ${failed ? "failed" : ""}" x="${x}" y="${y - 14}" width="${width}" height="28" rx="1" fill="${follower ? "#f5f5f5" : color}" stroke="${color}"/><text x="${x + width / 2}" y="${y + 1}" class="record-number" fill="${follower ? color : "white"}">${esc(message.id)}</text></g>`;
 }
 function sectors(cx, cy, keys) {
   if (!keys.length)
     return circle(cx, cy, 19, 'class="actor-marker focus-ring"');
-  const unique = [...new Set(keys.map(partitionColor))];
-  if (unique.length === 1)
+  const colors = keys.map(partitionColor);
+  if (colors.length === 1)
     return circle(
       cx,
       cy,
       19,
-      `fill="${unique[0]}" stroke="${unique[0]}" class="focus-ring"`,
+      `fill="${colors[0]}" stroke="${colors[0]}" class="focus-ring"`,
     );
   return (
-    unique
+    colors
       .map((color, i) => {
-        const start = (i / unique.length) * Math.PI * 2 - Math.PI / 2,
-          end = ((i + 1) / unique.length) * Math.PI * 2 - Math.PI / 2;
+        const start = (i / colors.length) * Math.PI * 2 - Math.PI / 2,
+          end = ((i + 1) / colors.length) * Math.PI * 2 - Math.PI / 2;
         return `<path d="M${cx} ${cy}L${cx + 19 * Math.cos(start)} ${cy + 19 * Math.sin(start)}A19 19 0 ${end - start > Math.PI ? 1 : 0} 1 ${cx + 19 * Math.cos(end)} ${cy + 19 * Math.sin(end)}Z" fill="${color}"/>`;
       })
       .join("") +
     circle(cx, cy, 19, 'fill="none" stroke="#babdbe" class="focus-ring"')
   );
+}
+
+function patchSvg(el, next) {
+  for (const attr of [...el.attributes])
+    if (!next.hasAttribute(attr.name)) el.removeAttribute(attr.name);
+  for (const attr of [...next.attributes])
+    if (el.getAttribute(attr.name) !== attr.value) el.setAttribute(attr.name, attr.value);
+  if (next.classList.contains("message-tile")) {
+    // A tile's title, rectangle and ID stay mounted through processing and completion.
+    [...next.children].forEach((child, i) => patchSvg(el.children[i], child));
+  } else if (el.textContent !== next.textContent) el.textContent = next.textContent;
+}
+function consumerMarkup(el, html) {
+  const next = document.createElementNS(ns, "g");
+  next.innerHTML = html;
+  const keyed = parent => {
+    const counts = new Map();
+    return [...parent.children].map(child => {
+      const type = child.tagName + ":" + (child.getAttribute("class") || "");
+      const count = counts.get(type) || 0; counts.set(type, count + 1);
+      return [child.classList.contains("message-tile") ? "message:" + child.dataset.message : type + ":" + count, child];
+    });
+  };
+  const existing = new Map(keyed(el));
+  let previous = null;
+  for (const [key, child] of keyed(next)) {
+    const current = existing.get(key) || child.cloneNode(true);
+    if (existing.has(key)) patchSvg(current, child);
+    existing.delete(key);
+    const at = previous ? previous.nextElementSibling : el.firstElementChild;
+    if (current !== at) el.insertBefore(current, at);
+    previous = current;
+  }
+  existing.forEach(child => child.remove());
 }
 
 export class Diagram {
@@ -234,6 +269,10 @@ export class Diagram {
       const c = state.groups
         .flatMap((g) => g.consumers)
         .find((c) => c.id === n.data.id);
+      const group = state.groups.find(g => g.id === c.groupId);
+      c.lag = Number.isFinite(c.lag) ? Math.max(0, c.lag) : (group?.offsets || [])
+        .filter(o => o.ownerId === c.id && c.assignments.includes(o.key))
+        .reduce((sum, o) => sum + Math.max(0, Number.isFinite(o.lag) ? o.lag : (o.logEnd ?? 0) - (o.committedNext ?? 0)), 0);
       n.data = c;
       const keys = c.assignments.filter(
         (k) => !view.topic || k.split(":")[0] === view.topic,
@@ -244,6 +283,7 @@ export class Diagram {
             e.groupId === c.groupId &&
             (!view.topic || e.partitionKey.split(":")[0] === view.topic),
         )
+        .filter((e, i, all) => !all.slice(i + 1).some(later => later.messageId === e.messageId))
         .slice(-5)
         .reverse();
       const messages = c.processing
@@ -266,7 +306,7 @@ export class Diagram {
           }));
       items.push({
         node: n,
-        html: `<title>${esc(c.name)} · ${esc(c.groupId)} · ${keys.length ? keys.map((k) => this.partitionName(k)).join(", ") : "no assigned partition"} · ${c.status} · ${c.rate} msg/s · click for actions</title><path class="branch-line" d="M${n.cx + 19} ${n.cy}H${l.width - 30}"/>${sectors(n.cx, n.cy, c.online ? keys : [])}${label(n.cx, n.cy + 1, c.id.replace(/[^0-9]/g, "") || "C", "partition-number", "middle").replace('class="partition-number"', `class="partition-number" fill="${keys.length && c.online ? "white" : "#828384"}"`)}${wrapped(n.logX, n.cy - (wraps(c.name, Math.max(22, Math.floor((l.width - n.logX - 20) / 8))) ? 44 : 25), c.name, Math.max(22, Math.floor((l.width - n.logX - 20) / 8)), "start")}${messages.map((m, i) => record(n.logX + i * (n.cell + 6), n.cy, n.cell, m.message, m.key, { processing: m.current, failed: m.current && c.status === "FAILED" })).join("")}${label(n.logX, n.cy + 31, c.online ? (c.status === "IDLE" ? "Idle · no assigned partition" : c.paused ? "Paused" : c.status === "FAILED" ? "× Failed attempt" : c.processing ? `Processing ${c.processing.message.id}` : `✓ ${c.successes} processed`) : "● Offline", "status-text")}${view.commits ? label(l.width - 28, n.cy + 31, this.commitLabel(c), "commit-text", "end") : ""}${!c.online ? circle(n.cx + 17, n.cy - 15, 5, 'class="offline-indicator"') : ""}`,
+        html: `<title>${esc(c.name)} · ${esc(c.groupId)} · ${keys.length ? keys.map((k) => this.partitionName(k)).join(", ") : "no assigned partition"} · ${c.status} · ${c.rate} msg/s · click for actions</title><path class="branch-line" d="M${n.cx + 19} ${n.cy}H${l.width - 30}"/>${sectors(n.cx, n.cy, c.online ? keys : [])}${label(n.cx, n.cy + 1, c.id.replace(/[^0-9]/g, "") || "C", "partition-number", "middle").replace('class="partition-number"', `class="partition-number" fill="${keys.length && c.online ? "white" : "#828384"}"`)}${wrapped(n.logX, n.cy - (wraps(c.name, Math.max(22, Math.floor((l.width - n.logX - 20) / 8))) ? 44 : 25), c.name, Math.max(22, Math.floor((l.width - n.logX - 20) / 8)), "start")}${messages.map((m, i) => record(n.logX + i * (n.cell + 6), n.cy, n.cell, m.message, m.key, { processing: m.current, failed: m.current && c.status === "FAILED", processed: !m.current })).join("")}${label(n.logX, n.cy + 31, c.online ? (c.status === "ASSIGNING" ? "⇢ Assigning partitions" : c.status === "REBALANCING" ? "⇄ Rebalancing" : c.status === "IDLE" ? "Idle · no assigned partition" : c.paused ? "Paused" : c.status === "FAILED" ? "× Failed attempt" : c.processing ? `Processing ${c.processing.message.id}` : `${c.successes} processed`) : "● Offline", "status-text")}${label(n.cx, n.cy + 39, c.lag, "consumer-lag", "middle")} ${view.commits ? label(l.width - 28, n.cy + 31, this.commitLabel(c), "commit-text", "end") : ""}${!c.online ? circle(n.cx + 17, n.cy - 15, 5, 'class="offline-indicator"') : ""}`,
       });
     }
     if (view.commits) {
@@ -310,6 +350,10 @@ export class Diagram {
       el.dataset.node = node.id;
       el.dataset.kind = node.kind;
       el.dataset.sourceId = node.data?.id ?? node.id;
+      if (node.kind === "consumer") {
+        el.dataset.lag = node.data.lag;
+        el.dataset.lagThreshold = CONSUMER_LAG_THRESHOLD;
+      }
       if (node.kind === "replica") {
         el.dataset.partition = node.data.key;
         el.dataset.broker = node.broker.id;
@@ -323,8 +367,15 @@ export class Diagram {
           : node.data?.name || node.data?.id || "Offset store",
       );
       if (el._markup !== html) {
-        el.innerHTML = html;
+        if (node.kind === "consumer") consumerMarkup(el, html);
+        else el.innerHTML = html;
         el._markup = html;
+      }
+      if (node.kind === "consumer") {
+        const text = "Committed-offset lag " + node.data.lag + "; red alert at " + CONSUMER_LAG_THRESHOLD + " records. Includes completed work awaiting commit.";
+        el.querySelector(".consumer-lag")?.setAttribute("aria-label", text);
+        const title = el.querySelector(":scope > title");
+        if (!title.textContent.endsWith(text)) title.textContent += " \u00b7 " + text;
       }
     }
     existing.forEach((el) => el.remove());
@@ -366,7 +417,7 @@ export class Diagram {
     el.setAttribute("d", job.route.d);
     el.setAttribute(
       "class",
-      `connection ${job.event.stage === "COMMITTED" ? "commit" : job.event.stage === "REPLICATED" ? "replication" : "delivery"}`,
+      `connection ${job.event.stage === "ASSIGNMENT" ? "assignment" : job.event.stage === "COMMITTED" ? "commit" : job.event.stage === "REPLICATED" ? "replication" : "delivery"}`,
     );
     const title = document.createElementNS(ns, "title");
     title.textContent = `${job.event.sourceName} → ${job.event.destinationName} · ${this.partitionName(job.event.partitionKey)}${job.event.groupId ? " · " + job.event.groupId : ""}`;

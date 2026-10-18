@@ -174,6 +174,64 @@ function drain(r, now = 0) {
   assert(r.idle, "All stages must settle without a deadlock");
   return now;
 }
+test("partition assignments finish before messages and do not become business records", async () => {
+  const finished=[], r=await replay({finish:e=>finished.push(e.stage)});
+  r.enqueue({...event(1,"DELIVERED"),stage:"ASSIGNMENT",message:null,messageId:"",destinationName:"Worker"});
+  r.enqueue(event(2,"PRODUCED"));
+  r.enqueue(event(3,"DELIVERED"));
+  assert(r.queue[1].dependencies.includes(1));assert(r.queue[2].dependencies.includes(1));
+  r.frame(100,true,true);assert.equal(r.clock,0);assert.equal(r.active.length,0);
+  drain(r);assert.deepEqual(finished,["ASSIGNMENT","PRODUCED","DELIVERED"]);
+});
+test("a consumer acquires its visible partition only when the assignment packet arrives", async () => {
+  const {Presentation}=await load("presentation"), p=new Presentation();
+  p.sync(fixture(0));
+  assert.deepEqual(p.snapshot().groups[0].consumers[0].assignments,[]);
+  p.finish({...event(1,"DELIVERED"),stage:"ASSIGNMENT",message:null,messageId:""});
+  const c=p.snapshot().groups[0].consumers[0];
+  assert.deepEqual(c.assignments,["t1:0"]);assert.equal(c.processing,null);assert.equal(c.successes,0);
+  const raw = fixture(0); raw.groups[0].consumers[0].assignments.push("t1:1");
+  p.sync(raw);
+  assert.equal(p.snapshot().groups[0].consumers[0].status, "ASSIGNING", "Partial ownership still shows the remaining assignment in progress");
+});
+test("multiple assignments to one consumer arrive sequentially before business messages", async () => {
+  const arrivals = [], r = await replay({finish: e => arrivals.push(e.partitionKey)});
+  r.enqueue({...event(1, "DELIVERED"), stage: "ASSIGNMENT", message: null, messageId: "", partitionKey: "t1:0"});
+  r.enqueue({...event(2, "DELIVERED"), stage: "ASSIGNMENT", message: null, messageId: "", partitionKey: "t1:1"});
+  assert.deepEqual(r.queue[1].dependencies, [1]);
+  r.frame(100, true);
+  assert.equal(r.active.length, 1);
+  assert.equal(r.active[0].event.partitionKey, "t1:0");
+  drain(r);
+  assert.deepEqual(arrivals, ["t1:0", "t1:1"]);
+});
+test("completion changes the delivered tile in place, remains pauseable, and gates commits", async () => {
+  const {Presentation} = await load("presentation"), p = new Presentation();
+  p.sync(fixture()); p.finish(event(1, "DELIVERED"));
+  const packets = [], r = await replay({finish: e => p.finish(e)});
+  r.makePacket = job => {packets.push(job.event.stage); return {setAttribute() {}, remove() {}};};
+  r.enqueue(event(2, "PROCESSED")); r.enqueue(event(3, "COMMITTED"));
+  r.previous = 0; r.frame(100, true);
+  assert.equal(r.active[0].local, true); assert.deepEqual(packets, []);
+  assert.equal(p.snapshot().groups[0].consumers[0].processing.message.id, "M1");
+  r.frame(200, false); assert.equal(r.active[0].elapsed, 100);
+  assert.equal(p.snapshot().groups[0].consumers[0].successes, 0);
+  drain(r, 200);
+  assert.deepEqual(packets, ["COMMITTED"]);
+  assert.equal(p.snapshot().groups[0].consumers[0].processing, null);
+  assert.equal(p.histories.get("c1")[0].messageId, "M1");
+  assert.equal(p.snapshot().groups[0].offsets[0].committedNext, 1);
+});
+test("consumer lag follows visible ownership and each group's own committed offset", async () => {
+  const {Presentation} = await load("presentation"), p = new Presentation(), state = fixture(25);
+  state.groups[0].offsets[0].committedNext = 5;
+  p.sync(state, true);
+  assert.equal(p.snapshot().groups[0].consumers[0].lag, 20);
+  assert.equal(p.snapshot().groups[1].consumers[0].lag, 0);
+  p.workers.get("c1").owned.clear();
+  assert.equal(p.snapshot().groups[0].consumers[0].lag, 0);
+  assert.equal(p.snapshot().groups[0].lag, 20, "Unassigned lag remains visible at group level");
+});
 test("actual stages preserve production, replication, arrival, failure/retry and commit dependencies", async () => {
   const r = await replay();
   [
