@@ -76,7 +76,7 @@ export function buildLayout(state, view, viewportWidth, viewportHeight) {
     available,
     brokerHeight + 130,
     groupHeight + 130,
-    producers.length > 1 ? producers.length * 300 + 104 : 600,
+    producers.length > 1 ? producers.length * 340 + 104 : 600,
   );
   const nodes = new Map();
   const brokerNodes = [],
@@ -173,7 +173,7 @@ export function buildLayout(state, view, viewportWidth, viewportHeight) {
   producers.forEach((p, i) => {
     const producerBand = Math.min(
       height,
-      Math.max(available, producers.length * 300 + 104),
+      Math.max(available, producers.length * 340 + 104),
     );
     const cy =
       producers.length === 1
@@ -190,8 +190,9 @@ export function buildLayout(state, view, viewportWidth, viewportHeight) {
       x: 30,
       y: cy - 24,
       w: 190,
-      h: 128 + queueRows * 28,
-      cx: 125,
+      // Include the count and waiting captions below the final queue tile.
+      h: 160 + queueRows * 28,
+      cx: 100,
       cy,
       queueY: cy + 94,
       queueRows,
@@ -233,7 +234,9 @@ export function routePoints(layout, event) {
   const { brokerX, brokerWidth, consumerX } = layout;
   if (event.stage === "PRODUCED")
     return [
-      [a.cx, a.queueY + 13],
+      // The next FIFO tile is already visible. Start the departing packet
+      // just outside its right edge so their message labels never overlap.
+      [a.cx + 42 + 33 + 5, a.queueY + 13],
       [brokerX - 44, a.queueY + 13],
       [brokerX - 44, b.cy],
       [b.cx - 20, b.cy],

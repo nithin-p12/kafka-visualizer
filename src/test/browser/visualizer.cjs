@@ -94,7 +94,9 @@ fs.mkdirSync(out, { recursive: true });
     await req("/commands", { type: "PAUSE" });
     await req("/commands", { type: "RESET" });
     await page.goto(base);
-    await ready(() => window.kafkaLab?.state);
+    // A previous suite/tab may own the ten-second lease until it expires.
+    // Start interactions only after this browser can actually advance ticks.
+    await ready(() => window.kafkaLab?.state && window.kafkaLab.ownsPlayback);
     assert.equal(
       await page.locator("#toggle-descriptions, #descriptions").count(),
       0,

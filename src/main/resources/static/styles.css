@@ -440,12 +440,12 @@ main {
   color: var(--retry);
 }
 .canvas-tools {
-  position: absolute;
-  bottom: 18px;
-  left: 20px;
+  flex: 0 0 32px;
+  padding: 0 20px;
   display: flex;
   align-items: center;
   gap: 4px;
+  background: var(--paper);
   z-index: 6;
 }
 .canvas-tools button {
@@ -458,9 +458,6 @@ main {
   color: var(--muted);
   margin-left: 8px;
   pointer-events: none;
-}
-.workspace:has(.bottom-panel:not([hidden])) .canvas-tools {
-  bottom: 225px;
 }
 #exit-focus {
   position: fixed;
@@ -938,8 +935,7 @@ dialog::backdrop {
     right: 0;
   }
   .canvas-tools {
-    bottom: 10px;
-    left: 10px;
+    padding: 0 10px;
   }
   .legend {
     padding: 8px 12px;

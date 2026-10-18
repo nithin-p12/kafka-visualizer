@@ -148,7 +148,10 @@ function receive(next) {
   if (state && next.revision < state.revision) return;
   const first = !state;
   const newEpoch = currentEpoch !== next.epoch;
-  if (newEpoch || next.eventGap) {
+  // A reset deliberately discards the previous epoch's events. Its ID gap is
+  // not a disconnected client and must not seed future records into the UI.
+  const eventGap = next.eventGap && !newEpoch;
+  if (newEpoch || eventGap) {
     replay.reset();
     presentation.reset();
     currentEpoch = next.epoch;
@@ -165,14 +168,14 @@ function receive(next) {
   )
     replay.step = true;
   state = next;
-  const seed = (first && next.messageCount > 0) || next.eventGap;
+  const seed = (first && next.messageCount > 0) || eventGap;
   presentation.sync(next, seed);
   if (seed) presentation.seedHistory(next);
   if (!dirty) {
     draft = clone(next.configuration);
     draftBaseRevision = next.configRevision;
   }
-  if (next.eventGap) {
+  if (eventGap) {
     notice(
       "Reconnected: existing retained history loaded. New messages will animate individually.",
     );

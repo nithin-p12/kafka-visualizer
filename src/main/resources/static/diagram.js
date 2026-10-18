@@ -181,7 +181,7 @@ export class Diagram {
         .join("");
       items.push({
         node: p,
-        html: `<title>${esc(data.name)} publishes to ${esc(state.configuration.topics.find((t) => t.id === data.topicId)?.name)}. ${data.automatic ? "Click for actions." : "Click or press Enter/Space to publish the next queued message. Edit in Configuration."}</title>${circle(p.cx, p.cy, 22, 'class="actor-marker focus-ring"')}${label(p.cx, p.cy + 1, "P", "actor-symbol", "middle")}${wrapped(p.cx, p.cy + 48, data.name, 24)}${label(p.cx, p.cy + 84, "Next → pending FIFO", "status-text", "middle")}${blocks}${queue.length > p.queueRows ? label(p.cx, p.queueY + p.queueRows * 28 + 16, queue.length - p.queueRows + " more pending", "status-text", "middle") : ""}${waiting ? label(p.cx, p.queueY + p.queueRows * 28 + 34, fitText(waiting, 190, 11), "status-text", "middle") : ""}`,
+        html: `<title>${esc(data.name)} publishes to ${esc(state.configuration.topics.find((t) => t.id === data.topicId)?.name)}. ${data.automatic ? "Click for actions." : "Click or press Enter/Space to publish the next queued message. Edit in Configuration."}</title>${circle(p.cx, p.cy, 22, 'class="actor-marker focus-ring"')}${label(p.cx, p.cy + 1, "P", "actor-symbol", "middle")}${wrapped(p.cx, p.cy + 48, data.name, 20)}${label(p.cx, p.cy + 84, "Next → pending FIFO", "status-text", "middle")}${blocks}${queue.length > p.queueRows ? label(p.cx, p.queueY + p.queueRows * 28 + 16, queue.length - p.queueRows + " more pending", "status-text", "middle") : ""}${waiting ? label(p.cx, p.queueY + p.queueRows * 28 + 34, fitText(waiting, 190, 11), "status-text", "middle") : ""}`,
       });
     }
     for (const b of l.brokers) {

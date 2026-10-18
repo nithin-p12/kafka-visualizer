@@ -106,8 +106,21 @@ npm.cmd install --prefix target/browser-tests --no-save --no-audit --no-fund pla
 node --test src/test/browser/layout.cjs src/test/browser/replay.cjs
 node src/test/browser/visualizer.cjs
 node src/test/browser/flow.cjs
+node src/test/browser/audit.cjs
 ```
 
 Requires Node and Microsoft Edge. Dashboard checks cover naming, JSON, controls, scenarios, failover/rebalance, routing, packet/label collisions and desktop/mobile layouts. `flow.cjs` checks actual arrival boundaries, 30 individual message journeys, FIFO dispatch, paused manual completion, retries, blocked-head recovery, playback ownership and the active setup summary. Pure tests verify 300 messages delivered independently to two groups, 1,000 stages without bundling/eviction, causal dependencies, pause and cancellation. The browser suites restore the paused default configuration afterward.
+
+`audit.cjs` runs all ten scenarios through the UI at desktop, laptop and mobile sizes, then checks mixed topic subscriptions, three producers/six consumers, independent commits, live partition increases, invalid/stale configurations, paused-consumer recovery, processing retry, stale-replica outages and retention/live speed controls. It samples visible label/packet geometry and consumer arrival boundaries, and writes an expandable **`target/browser-tests/audit/report.html`**, detailed `report.json` and screenshots. Run browser suites sequentially against a dedicated application instance: they share and replace its in-memory simulation state. Set `$env:KAFKA_LAB_URL='http://localhost:8081'` to use a separate test port.
+
+Optional browser recording (development-only download):
+
+```powershell
+node target/browser-tests/node_modules/playwright/cli.js install ffmpeg
+$env:KAFKA_AUDIT_VIDEO='1'
+node src/test/browser/audit.cjs
+```
+
+See [TEST_REPORT.md](TEST_REPORT.md) for the reviewed audit findings and verification scope. Generated evidence is local and ignored by Git; rerunning the audit regenerates it.
 
 REST endpoints live under `/api/simulation`: `state?afterEventId=…`, `configuration`, `commands`, `playback`, `scenarios`, and `partitions/{topicId}/{partitionId}/history`. Configuration PUT expects `{configuration, reset, configRevision}`; commands POST expects `{type, targetId?, key?, payload?}`. `PRODUCE` requests the next pending message; `messageCount` increments only on successful dispatch. Playback POST expects `{action, clientId, epoch, expectedTick, completedEventId}`, where action is `CLAIM`, `HEARTBEAT` or `ADVANCE`. Advancing requires ownership, the current epoch/tick and acknowledgement of all latest events. Snapshots add `producerQueues`, `manualFlow`, `manualStatus`, `canAdvance` and `playbackPaused`; message events include their immutable record data. Configuration JSON remains schema version 1 and excludes runtime queues.

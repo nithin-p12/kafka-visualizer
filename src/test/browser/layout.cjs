@@ -66,6 +66,29 @@ test("tick and message changes never move component positions", async () => {
     [...b.nodes].map(([id, n]) => [id, n.cx, n.cy]),
   );
 });
+test("three producer queues reserve space for waiting captions and the next producer", async () => {
+  const { buildLayout } = await load(), s = fixture();
+  s.configuration.producers = [1, 2, 3].map(i => ({ id: "p" + i, topicId: "t1" }));
+  for (const [width, height] of [[1920, 1004], [1366, 692], [390, 708]]) {
+    const l = buildLayout(s, view, width, height);
+    for (let i = 0; i < l.producers.length; i++) {
+      const p = l.producers[i];
+      const lastCaptionBottom = p.queueY + p.queueRows * 28 + 38;
+      assert(lastCaptionBottom < l.height, "Queue caption must remain in the canvas");
+      if (l.producers[i + 1]) assert(lastCaptionBottom + 8 < l.producers[i + 1].cy - 22, "Waiting caption touches the next producer marker");
+    }
+  }
+});
+test("a departing packet clears the next pending FIFO tile", async () => {
+  const { buildLayout, routePoints } = await load();
+  for (const width of [390, 1366, 1920]) {
+    const l = buildLayout(fixture(), view, width, 1004), p = l.producers[0];
+    const points = routePoints(l, { stage: "PRODUCED", source: p.id, destination: l.replicas[0].id });
+    assert(points[0][0] - 33 >= p.cx + 42 + 4, "Moving ID covers the next pending ID");
+    assert.equal(points[0][1], p.queueY + 13);
+    assert(points[1][0] - 33 > p.cx + 70, "Vertical packet corridor brushes a wrapped producer name");
+  }
+});
 test("sparse branches stay visible when broker replicas require scrolling", async () => {
   const { buildLayout } = await load(),
     s = fixture();
