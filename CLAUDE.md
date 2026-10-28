@@ -25,7 +25,7 @@ The server runs on **http://127.0.0.1:8888** (`application.yaml`). `StartupUrls.
 
 ## Working agreements (from the user)
 
-- **Tests: only when asked.** Don't run the browser suites after each change. Do keep `src/test/browser/*.cjs` in step with markup/URL changes, and `node --check` edited JS. A quick screenshot to check layout is fine.
+- **Tests: only when asked.** Don't run the browser suites after each change. Do keep `src/test/browser/*.cjs` in step with markup/URL changes, and syntax-check edited browser JS with `node --input-type=module --check < file.js` (plain `node --check` does not catch errors in these ES modules). A quick screenshot to check layout is fine.
 - **Commits: use judgement.** Don't commit every small tweak. Commit when a coherent piece of work is done: a new feature, a batch of related fixes, or anything the user should be able to pull on another laptop. Clear message: imperative subject, short body on what and why, ending with the co-author trailer. Commit straight to `main` (the user's workflow).
 - **Push:** after every 5 unpushed commits (`git rev-list --count origin/main..HEAD`), and whenever this file changes. Never force-push.
 - **Plain language** in UI copy and replies.
@@ -43,7 +43,7 @@ The server runs on **http://127.0.0.1:8888** (`application.yaml`). `StartupUrls.
 ## Learn code map
 
 - `learn/learn.js`: page logic (map, routing `#/<lesson>[/<mode>/<step>]`, tabs, guide card, recap, progress in `localStorage`).
-- `learn/player.js`: step player (seek replays earlier steps instantly; hooks `step`, `started`, `settled`, `hold`, `done`).
+- `learn/player.js`: step player. Each step goes reading → running → holding: a reading pause first (2.5–9 s from the word count, shown as a bar on the guide card; while paused it waits for Play/"Start now"), then the animation, then a short hold. Seek replays earlier steps instantly; `replay()` re-runs a step without the reading pause. Hooks: `step`, `started`, `read`, `settled`, `hold`, `done`.
 - `learn/scene.js`: SVG helpers and the pausable clock.
 - `learn/lessons/<id>.js`: one lesson each: `watch`/`deeper` tracks (`build`, `steps[{title,text,observe,focus,run}]`), `tryIt`, `takeaway`, `recap {points, interview[{q,a}]}`, `quiz`. `lessons/index.js` holds the curriculum (`LESSONS`, `LEVELS`).
 - `learn/lessons/kit.js`: shared helpers for multi-broker scenes (broker boxes, partition lanes with leader/follower roles, record flights, catch-up).

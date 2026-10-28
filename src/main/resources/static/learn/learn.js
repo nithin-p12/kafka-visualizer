@@ -33,6 +33,7 @@ const player = new Player(stage, {
   },
   settled(i, step, v) { if (guideOn && step.focus) spotlight(step.focus(v)); },
   hold(t) { $('hold-bar').style.width = `${t * 100}%`; },
+  read(t) { $('gc-read-bar').style.width = `${t * 100}%`; },
   state: renderPlayState,
   done() {
     if (mode === 'watch' && !progress.done.includes(current.id)) progress.done.push(current.id);
@@ -366,10 +367,18 @@ function renderStep(i, step) {
 }
 function renderPlayState() {
   const b = $('play'), p = player.phase;
-  b.textContent = p === 'done' ? '↻ Replay' : p === 'waiting' ? '▶ Continue' : player.userPaused ? '▶ Play' : '⏸ Pause';
+  b.textContent = p === 'done' ? '↻ Replay' : p === 'waiting' ? '▶ Continue' : p === 'reading' && player.userPaused ? '▶ Start' : player.userPaused ? '▶ Play' : '⏸ Pause';
+  // The card's own button: skip the reading pause, or watch the step's animation again once it has played.
+  const go = $('gc-go'), reading = p === 'reading', played = ['holding', 'waiting', 'done'].includes(p);
+  go.style.visibility = reading || played ? 'visible' : 'hidden';
+  go.textContent = reading ? '▶ Start now' : '↻ Replay step';
+  go.title = reading ? 'Start the animation now (Play or Space also work)' : "Watch this step's animation again";
+  go.classList.toggle('primary', reading);
+  $('guide-card').classList.toggle('reading', reading && !player.userPaused);
   $('stage-wrap').classList.toggle('paused', mode !== 'try' && player.userPaused && p !== 'done' && $('recap').hidden);
 }
 $('play').addEventListener('click', () => player.toggle());
+$('gc-go').addEventListener('click', () => player.phase === 'reading' ? player.startNow() : player.replay());
 $('prev-step').addEventListener('click', () => player.prev());
 $('next-step').addEventListener('click', () => player.next());
 $('replay').addEventListener('click', () => player.seek(0));

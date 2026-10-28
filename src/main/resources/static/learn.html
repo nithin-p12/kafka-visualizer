@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="application-name" content="Kafka Visualizer" />
     <title>Learn Kafka</title>
-    <link rel="stylesheet" href="/learn/learn.css?v=20261028-7" />
+    <link rel="stylesheet" href="/learn/learn.css?v=20261029-1" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
@@ -81,7 +81,8 @@
             ><button id="full-btn" class="tool" title="Full screen (F)">⛶ Full screen</button>
           </div>
           <div id="guide-card" class="guide-card-run" hidden aria-live="polite">
-            <div class="gc-head"><span class="eyebrow" id="step-count"></span><button id="gc-min" class="gc-min" title="Minimise the guide (M)" aria-expanded="true">–</button></div>
+            <span class="gc-read" aria-hidden="true"><span id="gc-read-bar"></span></span>
+            <div class="gc-head"><span class="eyebrow" id="step-count"></span><button id="gc-go" class="gc-go" style="visibility:hidden">▶ Start now</button><button id="gc-min" class="gc-min" title="Minimise the guide (M)" aria-expanded="true">–</button></div>
             <h2 id="step-title"></h2>
             <div class="gc-body">
               <p id="step-text"></p>
@@ -139,6 +140,6 @@
         </div>
       </div>
     </main>
-    <script type="module" src="/learn/learn.js?v=20261028-7"></script>
+    <script type="module" src="/learn/learn.js?v=20261029-1"></script>
   </body>
 </html>

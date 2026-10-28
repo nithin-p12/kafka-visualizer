@@ -34,7 +34,7 @@ const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker', 'cluster', 
       await shot(`${id}-watch-start`);
       // Pause freezes the animation clock.
       await page.locator('#play').click();
-      assert.equal(await page.locator('#play').innerText(), '▶ Play');
+      assert.match(await page.locator('#play').innerText(), /^▶ (Play|Start)$/);
       await page.locator('#play').click();
       // Seek to every step so each final frame can be reviewed.
       const steps = await page.evaluate(() => window.kafkaLearn.player.count);
@@ -42,6 +42,9 @@ const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker', 'cluster', 
       await page.locator('#play').click();
       for (let i = 0; i < steps; i++) {
         await page.locator(`#dots .dot[data-step="${i}"]`).click();
+        // Paused, a step waits on its reading pause until it is started.
+        await ready(i => window.kafkaLearn.player.i === i && window.kafkaLearn.player.phase === 'reading', i);
+        await page.locator('#gc-go').click();
         await ready(i => window.kafkaLearn.player.i === i && window.kafkaLearn.player.phase === 'waiting', i);
         assert.equal(await page.locator('#step-count').textContent(), `Step ${i + 1} of ${steps}`);
         assert((await page.locator('#g-observe').textContent()).length > 5, `${id} step ${i} has an observe hint`);
@@ -85,6 +88,9 @@ const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker', 'cluster', 
       const deep = await page.evaluate(() => window.kafkaLearn.player.count);
       for (let i = 0; i < deep; i++) {
         await page.locator(`#dots .dot[data-step="${i}"]`).click();
+        // Paused, a step waits on its reading pause until it is started.
+        await ready(i => window.kafkaLearn.player.i === i && window.kafkaLearn.player.phase === 'reading', i);
+        await page.locator('#gc-go').click();
         await ready(i => window.kafkaLearn.player.i === i && window.kafkaLearn.player.phase === 'waiting', i);
         await shot(`${id}-deeper-${i + 1}`);
       }
