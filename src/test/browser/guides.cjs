@@ -25,7 +25,7 @@ fs.mkdirSync(out,{recursive:true});
  }
  try {
    await api('/scenarios/2');await api('/commands',{type:'PAUSE'});await api('/commands',{type:'RESET'});
-   await page.goto(base);await ready(()=>window.kafkaLab?.ownsPlayback);
+   await page.goto(base + '/visualizer.html');await ready(()=>window.kafkaLab?.ownsPlayback);
    await page.locator('#learning-dialog[open]').waitFor();assert.match(await page.locator('#learning-title').innerText(),/Welcome/);
    assert.equal(await page.locator('#learning-continue').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(22, 119, 255)');
    const originalEpoch=await page.evaluate(()=>window.kafkaLab.state.epoch);
@@ -99,7 +99,7 @@ fs.mkdirSync(out,{recursive:true});
    assert.deepEqual(errors,[]);
    await api('/scenarios/2');await api('/commands',{type:'PAUSE'});await api('/commands',{type:'RESET'});
    const reduced=await browser.newPage({reducedMotion:'reduce'});
-   await reduced.goto(base);await reduced.waitForSelector('#guide-overlay .guide-ring');
+   await reduced.goto(base + '/visualizer.html');await reduced.waitForSelector('#guide-overlay .guide-ring');
    const stableRing = await reduced.locator('#guide-overlay .guide-ring').first().elementHandle();
    await reduced.waitForTimeout(200);
    assert(await stableRing.evaluate(e=>e.isConnected),'Guide frames must update the existing outline rather than replace it');

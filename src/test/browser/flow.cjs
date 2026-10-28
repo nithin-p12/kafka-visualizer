@@ -61,7 +61,7 @@ fs.mkdirSync(out, { recursive: true });
     c.commitIntervalTicks = 600;
     c.autoCommit = true;
     await api("/configuration", { configuration: c, reset: true }, "PUT");
-    await page.goto(base);
+    await page.goto(base + '/visualizer.html');
     await ready(() => window.kafkaLab?.ownsPlayback);
     assert.match(
       await page.locator("#setup-summary").innerText(),
@@ -192,7 +192,7 @@ fs.mkdirSync(out, { recursive: true });
     );
     await shot("after-28-individual-journeys");
     const observer = await browser.newPage();
-    await observer.goto(base);
+    await observer.goto(base + '/visualizer.html');
     await observer.waitForFunction(() => window.kafkaLab?.state);
     assert.equal(
       await observer.evaluate(() => window.kafkaLab.ownsPlayback),

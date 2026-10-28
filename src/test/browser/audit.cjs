@@ -111,7 +111,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':
     await api('/scenarios/2');
     await api('/commands', { type: 'PAUSE' });
     await api('/commands', { type: 'RESET' });
-    await page.goto(base);
+    await page.goto(base + '/visualizer.html');
     await ready(() => window.kafkaLab?.ownsPlayback);
     await page.locator('#animation-buttons [data-speed="4"]').click();
     const resets = { name: 'Rapid resets between browser polls', checks: [] };

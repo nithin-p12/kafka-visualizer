@@ -13,7 +13,7 @@ cd kafka-visualizer
 .\mvnw.cmd spring-boot:run
 ```
 
-Open **http://localhost:8080**. Stop the application with **Ctrl+C**.
+Open **http://localhost:8080** for the home page, which links to **Learn** (`/learn.html`) and the **Visualizer** (`/visualizer.html`). The startup log prints all three URLs. Stop the application with **Ctrl+C**.
 
 Alternatively, after building:
 
@@ -24,6 +24,19 @@ java -jar .\target\kafka-visualizer-0.0.1-SNAPSHOT.jar
 Requires JDK 17 (`java -version`; `JAVA_HOME` points at the JDK). The Maven wrapper downloads Maven/dependencies on first use. The application binds to localhost on port 8080; stop any other application using that port before starting. No internet connection is needed at runtime.
 
 In IntelliJ IDEA, import/reload the Maven project and run `com.kafka.visualizer.KafkaVisualizerApplication`. The Maven project and Spring application are named `kafka-visualizer`.
+
+## Learn Kafka (animated lessons)
+
+Open **http://localhost:8080/learn.html** (or the **Learn** card on the home page, or **📘 Learn** in the Visualizer toolbar). The learning map links to the Visualizer from its top bar; inside a lesson, the **Kafka** logo returns to the map. The learning map orders lessons from single components to end-to-end flow:
+
+1. **Atoms**: one component at a time. Built so far: Record, Topic, Partition, Offset, Broker. Cluster, replicas, producer, consumer, groups, commit/lag and retention appear as "coming soon".
+2. **Links**: how two components interact (key routing, acks, replication, election, assignment, rebalance, redelivery, multiple groups).
+3. **End to end**: one message's full journey, then the live Visualizer.
+4. **Deep dives (optional)**: ISR/high watermark, batching, idempotence, KRaft. Kept separate so the main path stays light.
+
+Each lesson has three tabs. **Watch** plays a step-by-step animation by itself, with a caption per step; pause (Space), step (← →), jump with the step dots, replay and change speed. **Try it** puts you in control of the same scene with buttons (for example, choose a key and see which partition Kafka's real murmur2 partitioner picks, or crash a consumer before committing). **Go deeper** is an optional extra track. A takeaway and one interview-style check follow each lesson.
+
+**Guide me** (top right, on by default) shows a side panel with *What is this?*, *Watch for*, *Up next* and *Where it fits*, and draws purple spotlights around the element to observe once each step settles. Turning it off hides all guide surfaces. Progress, quiz answers, speed and the guide preference stay in browser storage. Lessons are browser-only scripted animations; they do not use or change the simulation engine.
 
 ## Use the dashboard
 
@@ -115,6 +128,7 @@ node src/test/browser/flow.cjs
 node src/test/browser/audit.cjs
 node src/test/browser/guides.cjs
 node src/test/browser/consumer-feedback.cjs
+node src/test/browser/learn.cjs
 ```
 
 Requires Node and Microsoft Edge. Dashboard checks cover naming, JSON, controls, scenarios, failover/rebalance, routing, packet/label collisions and desktop/mobile layouts. `flow.cjs` checks actual arrival boundaries, 30 individual message journeys, FIFO dispatch, paused manual completion, retries, blocked-head recovery, playback ownership and the active setup summary. Pure tests verify 300 messages delivered independently to two groups, 1,000 stages without bundling/eviction, causal dependencies, pause and cancellation. The browser suites restore the paused default configuration afterward.
@@ -144,6 +158,8 @@ Primary buttons, selected tabs, speed selections, focus rings and queue-head out
 A delivered record pulses while processing, then changes to a processed tile at the same position without a checkmark. The same tile and rectangle remain mounted during this transition. There is no completion packet returning to the consumer. Success outlines blink for 280 ms; checkpoint pointers remain purple. Previously processed IDs occupy one history tile each, while actual repeated processing is still reflected in events and processing counters. Commits remain separate.
 
 Each consumer shows a red **number only** for its visibly assigned partitions: log end minus committed next. This includes completed work awaiting a commit. At **20 records**, its box pulses red for four seconds, then fades; each further increase of 20 can trigger another alert, with a four-second cooldown. The count remains visible, and these alerts work with scenario guidance disabled. Unassigned backlog stays in group-level lag. Hover over the consumer for this definition.
+
+`learn.cjs` plays every Learn lesson step (Watch and Go deeper), exercises every Try-it control, answers each quick check, checks progress badges, the Guide me toggle (persisted, no spotlights when off), the mobile layout without horizontal scroll and the Visualizer's Learn link. Screenshots of every step are written to `target/browser-tests/learn`.
 
 `consumer-feedback.cjs` checks progressive assignment colors, 50/50 ownership, pause/resume during assignment, blue controls and purple guide accents, numeric lag fallback, identical tile identity and geometry before/after processing, short success feedback, absence of completion packets, lag threshold/count/fade with guidance disabled, and desktop/laptop/mobile screenshots. Evidence is written under `target/browser-tests/consumer-feedback`.
 

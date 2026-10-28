@@ -25,7 +25,7 @@ fs.mkdirSync(out, {recursive: true});
   const shot = name => page.screenshot({path: out + '/' + name + '.png'});
   try {
     await api('/scenarios/2'); await api('/commands', {type:'PAUSE'}); await api('/commands', {type:'RESET'});
-    await page.goto(base); await ready(() => window.kafkaLab?.ownsPlayback);
+    await page.goto(base + '/visualizer.html'); await ready(() => window.kafkaLab?.ownsPlayback);
     assert(await page.evaluate(() => performance.getEntriesByType('resource').filter(e => new URL(e.name).pathname.endsWith('.js')).every(e => new URL(e.name).searchParams.get('v') === '20261018-2')), 'Every frontend module uses the same fresh asset version');
     await page.locator('#animation-buttons [data-speed=".5"]').click();
     await api('/scenarios/4', {guided:true});
@@ -120,7 +120,7 @@ fs.mkdirSync(out, {recursive: true});
     assert(await redRing.evaluate(e => e.isConnected), 'Pulsing updates the existing outline');
     const reduced = await browser.newPage({reducedMotion:'reduce'});
     await reduced.addInitScript(() => {localStorage.setItem('kafka-welcome-v1','done');localStorage.setItem('kafka-guide-enabled','false');});
-    await reduced.goto(base); await reduced.waitForSelector('#guide-overlay .lag-alert');
+    await reduced.goto(base + '/visualizer.html'); await reduced.waitForSelector('#guide-overlay .lag-alert');
     const opacity = await reduced.locator('#guide-overlay .lag-alert').evaluate(e => e.style.opacity);
     await reduced.waitForTimeout(250);
     assert.equal(await reduced.locator('#guide-overlay .lag-alert').evaluate(e => e.style.opacity), opacity, 'Reduced motion keeps the alert steady before its final fade');

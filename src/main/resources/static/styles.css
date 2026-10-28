@@ -160,6 +160,19 @@ h3 {
 .toolbar-right {
   flex: none;
 }
+.learn-link {
+  padding: 8px 13px;
+  border: 1px solid #d8b7e9;
+  border-radius: 5px;
+  background: #f7effb;
+  color: #614373;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.learn-link:hover {
+  border-color: var(--guide);
+}
 .setup-summary {
   min-width: 0;
   overflow: hidden;
@@ -886,7 +899,8 @@ dialog::backdrop {
     margin: 0 16px;
     gap: 7px;
   }
-  .toolbar button {
+  .toolbar button,
+  .toolbar .learn-link {
     font-size: 12px;
     padding: 8px 10px;
   }
@@ -920,7 +934,8 @@ dialog::backdrop {
   .toolbar-right {
     gap: 4px;
   }
-  .toolbar button {
+  .toolbar button,
+  .toolbar .learn-link {
     padding: 7px 8px;
   }
   .workspace {
@@ -958,7 +973,8 @@ dialog::backdrop {
     flex-wrap: wrap;
     justify-content: flex-start;
   }
-  .toolbar button {
+  .toolbar button,
+  .toolbar .learn-link {
     font-size: 11px;
     padding: 6px 7px;
   }
