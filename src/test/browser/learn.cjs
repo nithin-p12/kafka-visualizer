@@ -115,13 +115,10 @@ const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker'];
     await page.locator('#guide-btn').click();
     assert(await page.locator('#guide-toggle').isChecked());
 
-    // Focus mode trims the lesson header; the top bar stays hidden until the top edge is hovered.
-    await page.keyboard.press('f');
-    assert(!(await page.locator('#lesson-tagline').isVisible()));
-    assert(await page.locator('#next-lesson').isVisible(), 'topic arrows stay reachable in focus mode');
+    // No top bar inside a lesson; full screen (which implies the focus layout) is the only view toggle.
     assert(!(await page.locator('.learn-bar').isVisible()), 'no top bar inside a lesson');
-    await page.keyboard.press('f');
-    assert(await page.locator('#lesson-tagline').isVisible());
+    assert(await page.locator('#full-btn').isVisible());
+    assert.equal(await page.locator('#focus-btn').count(), 0);
 
     // Topic arrows jump straight to the neighbouring lessons.
     await page.locator('#next-lesson').click();
@@ -138,6 +135,7 @@ const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker'];
     await shot('mobile-lesson');
     await page.goto(base + '/learn.html#/');
     await shot('mobile-map');
+    assert.match(await page.locator('#continue').innerText(), /Continue where you left off/);
 
     // Home links to both apps; the map links to the Visualizer; the Visualizer links to Learn.
     await page.setViewportSize({ width: 1600, height: 1000 });

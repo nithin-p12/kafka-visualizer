@@ -10,8 +10,16 @@ const esc = str => String(str).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&l
 const progress = read('kafka-learn-progress', { done: [], quiz: {} });
 progress.modes ??= {};
 const MODE_NAMES = { watch: 'Watch', try: 'Try it', deeper: 'Go deeper' };
+const ICONS = {
+  watch: '<svg viewBox="0 0 16 16"><path d="M5 3.2v9.6l7.6-4.8z" fill="currentColor"/></svg>',
+  try: '<svg viewBox="0 0 16 16"><path d="M4 2.2l8.6 5.3-3.7.9 2.2 4.2-1.7.9-2.2-4.2L4.4 12z" fill="currentColor"/></svg>',
+  deeper: '<svg viewBox="0 0 16 16"><path d="M8 2.2l6 3-6 3-6-3zM2 8.2l6 3 6-3M2 11.2l6 3 6-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+  recap: '<svg viewBox="0 0 16 16"><path d="M2.6 4.6l1.4 1.4 2.6-2.8M2.6 10.6l1.4 1.4 2.6-2.8M9 4.8h5M9 10.8h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+const icon = name => `<i class="ico">${ICONS[name]}</i>`;
+for (const i of document.querySelectorAll('[data-icon]')) i.innerHTML = ICONS[i.dataset.icon];
 const stage = new Stage($('stage'));
-let pausedByRecap = false, current = null, mode = 'watch', guideOn = read('kafka-learn-guide', true), tryState = null, focusOn = read('kafka-learn-focus', false);
+let pausedByRecap = false, current = null, mode = 'watch', guideOn = read('kafka-learn-guide', true), tryState = null;
 
 const player = new Player(stage, {
   step(i, step) { renderStep(i, step); },
@@ -66,52 +74,77 @@ function setGuide(on) {
 $('guide-toggle').addEventListener('change', e => setGuide(e.target.checked));
 $('guide-btn').addEventListener('click', () => setGuide(!guideOn));
 
-// ---------- focus & full screen ----------
-function setFocus(on) {
-  focusOn = on; save('kafka-learn-focus', on);
-  document.body.classList.toggle('focus', on);
-  $('focus-btn').classList.toggle('selected', on);
-  $('focus-btn').textContent = on ? '⤡ Exit focus' : '⤢ Focus';
-}
-$('focus-btn').addEventListener('click', () => setFocus(!focusOn));
+// ---------- full screen (always in focus layout) ----------
 function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen();
   else $('lesson-view').requestFullscreen?.().catch(() => {});
 }
 $('full-btn').addEventListener('click', toggleFullscreen);
-let focusBeforeFull = null;
 document.addEventListener('fullscreenchange', () => {
   const on = !!document.fullscreenElement;
-  if (on) { focusBeforeFull = focusOn; setFocus(true); }
-  else if (focusBeforeFull !== null) { setFocus(focusBeforeFull); focusBeforeFull = null; }
-  $('full-btn').classList.toggle('selected', on);
-  $('full-btn').title = on ? 'Exit full screen (Esc)' : 'Full screen';
+  document.body.classList.toggle('focus', on);
+  $('full-btn').textContent = on ? '✕ Exit full screen' : '⛶ Full screen';
+  $('full-btn').title = on ? 'Exit full screen (Esc or F)' : 'Full screen (F)';
 });
 
 // ---------- map ----------
+const LEVEL_TONE = { atoms: 'lv-atoms', links: 'lv-links', e2e: 'lv-e2e', deep: 'lv-deep' };
 function renderMap() {
   const ready = new Set(LESSONS.map(l => l.id));
   const nextUp = LESSONS.find(l => !progress.done.includes(l.id));
   const doneCount = LESSONS.filter(l => progress.done.includes(l.id)).length;
   $('map-progress').textContent = `${doneCount} of ${LESSONS.length} available lessons watched`;
   $('map-bar').style.width = `${doneCount / LESSONS.length * 100}%`;
-  $('map-next').innerHTML = nextUp ? `Suggested next: <a href="#/${nextUp.id}">${nextUp.n} · ${esc(nextUp.title)}</a>` : 'All available lessons watched. More are coming.';
+  renderContinue(nextUp);
+  const levels = LEVELS.map(level => {
+    const [chip, name] = level.title.split(' · ');
+    const items = level.items.map(item => typeof item === 'string' ? lessonById(item) : item);
+    return { ...level, chip, name, items, readyCount: items.filter(l => ready.has(l.id)).length };
+  });
+  $('level-nav').innerHTML = levels.map(lv => `<button class="level-pill ${LEVEL_TONE[lv.id]}" data-target="level-${lv.id}">${esc(lv.name)} <small>${lv.readyCount}/${lv.items.length}</small></button>`).join('');
+  for (const b of $('level-nav').children) b.addEventListener('click', () => $(b.dataset.target).scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
   let n = 0;
-  $('levels').innerHTML = LEVELS.map(level => `
-    <section class="level" id="level-${level.id}">
-      <header><h2>${esc(level.title)}</h2><p>${esc(level.blurb)}</p></header>
-      <ol class="cards">${level.items.map(item => {
-        const l = typeof item === 'string' ? lessonById(item) : item, isReady = ready.has(l.id), done = progress.done.includes(l.id);
+  $('levels').innerHTML = levels.map(lv => `
+    <section class="level ${LEVEL_TONE[lv.id]}" id="level-${lv.id}">
+      <header><span class="lv-chip">${esc(lv.chip)}</span><h2>${esc(lv.name)}</h2><p>${esc(lv.blurb)}</p><span class="count">${lv.readyCount ? `${lv.readyCount} ready · ` : ''}${lv.items.length} lesson${lv.items.length === 1 ? '' : 's'}</span></header>
+      <ol class="cards">${lv.items.map(l => {
+        const isReady = ready.has(l.id), done = progress.done.includes(l.id), inProgress = !done && progress.last?.id === l.id;
         n++;
-        const badge = done ? '<span class="badge done">✓ Watched</span>' : l === nextUp ? '<span class="badge next">Start here</span>' : isReady ? '<span class="badge">Ready</span>' : '<span class="badge soon">Coming soon</span>';
-        const body = `<span class="num">${n}</span><strong>${esc(l.title)}</strong><span class="tag">${esc(l.tagline)}</span>${badge}`;
+        const badge = done ? '<span class="badge done">✓ Watched</span>' : inProgress ? '<span class="badge progress">In progress</span>' : l === nextUp ? '<span class="badge next">Start here</span>' : isReady ? '<span class="badge">Ready</span>' : '<span class="badge soon">Coming soon</span>';
+        const body = `<span class="num">${done ? '✓' : n}</span><strong>${esc(l.title)}</strong><span class="tag">${esc(l.tagline)}</span>${badge}`;
         return `<li>${isReady ? `<a class="card ${done ? 'is-done' : ''} ${l === nextUp ? 'is-next' : ''}" href="#/${l.id}" data-lesson="${l.id}">${body}</a>` : `<div class="card is-soon" aria-disabled="true">${body}</div>`}</li>`;
       }).join('')}</ol>
     </section>`).join('');
+  document.documentElement.style.setProperty('--bar-h', `${document.querySelector('.learn-bar').offsetHeight}px`);
+  markActiveLevel();
 }
+// "Continue where you left off": the last lesson, part and step you were on; otherwise the next lesson to start.
+function renderContinue(nextUp) {
+  const last = progress.last, l = last && lessonById(last.id), c = $('continue');
+  if (l) {
+    const track = last.mode === 'deeper' ? l.deeper : l.watch, total = track.steps.length, step = Math.min(last.step ?? 0, total - 1);
+    const where = last.mode === 'try' ? 'Try it' : `${MODE_NAMES[last.mode] ?? 'Watch'} · step ${step + 1} of ${total}`;
+    c.href = `#/${l.id}/${last.mode}/${last.mode === 'try' ? 0 : step}`;
+    c.innerHTML = `<span class="eyebrow">Continue where you left off</span><strong>${l.n} · ${esc(l.title)}</strong><small>${esc(where)}</small>`
+      + `<span class="bar"><span style="width:${last.mode === 'try' ? 100 : (step + 1) / total * 100}%"></span></span><span class="go">Continue →</span>`;
+  } else {
+    const start = nextUp ?? LESSONS[0];
+    c.href = `#/${start.id}`;
+    c.innerHTML = `<span class="eyebrow">${nextUp ? 'Start here' : 'All lessons watched'}</span><strong>${start.n} · ${esc(start.title)}</strong><small>${esc(start.tagline)}</small><span class="go">${nextUp ? 'Start →' : 'Replay →'}</span>`;
+  }
+}
+function markActiveLevel() {
+  if ($('map-view').hidden) return;
+  const line = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bar-h')) || 61) + 80;
+  let active = null;
+  for (const sec of document.querySelectorAll('.level')) if (sec.getBoundingClientRect().top <= line) active = sec.id;
+  active ??= document.querySelector('.level')?.id;
+  for (const b of $('level-nav').children) b.classList.toggle('active', b.dataset.target === active);
+}
+addEventListener('scroll', markActiveLevel, { passive: true });
 
 // ---------- lesson ----------
-function openLesson(l) {
+function openLesson(l, resume = {}) {
   current = l;
   $('lesson-num').textContent = l.n;
   $('lesson-title').textContent = l.title;
@@ -130,7 +163,7 @@ function openLesson(l) {
   $('related').innerHTML = l.related.map(id => lessonById(id) ? `<a href="#/${id}">${esc(titleOf(id))}</a>` : '').join('');
   arrow($('prev-lesson'), LESSONS[i - 1], 'Previous');
   arrow($('next-lesson'), LESSONS[i + 1], 'Next');
-  setMode('watch');
+  setMode(['watch', 'try', 'deeper'].includes(resume.mode) ? resume.mode : 'watch', resume.step);
   document.title = `${l.title} · Learn Kafka`;
 }
 function arrow(a, l, dir) {
@@ -154,7 +187,7 @@ function renderTabs() {
     b.setAttribute('aria-current', on ? 'step' : 'false');
   }
 }
-function setMode(m) {
+function setMode(m, step = 0) {
   if (m === 'recap') return showRecap(true);
   mode = m;
   pausedByRecap = false;
@@ -170,6 +203,7 @@ function setMode(m) {
   $('deeper-text').textContent = current.deeper.note;
   renderDots(track.steps);
   player.load(track);
+  if (step > 0) player.seek(step);
 }
 for (const b of document.querySelectorAll('.modes [data-mode]')) b.addEventListener('click', () => setMode(b.dataset.mode));
 
@@ -189,13 +223,13 @@ function renderPath() {
   const seen = visited(), next = LESSONS[LESSONS.indexOf(current) + 1];
   const upNext = ['watch', 'try', 'deeper'].find(m => !seen.includes(m)) ?? 'next';
   const steps = [
-    { go: 'watch', n: '①', title: 'Watch', sub: 'The animated walkthrough' },
-    { go: 'try', n: '②', title: 'Try it', sub: 'Same scene, you press the buttons' },
-    { go: 'deeper', n: '③', title: 'Go deeper', sub: `Optional · ${current.deeper.note}` },
+    { go: 'watch', n: icon('watch'), title: 'Watch', sub: 'The animated walkthrough' },
+    { go: 'try', n: icon('try'), title: 'Try it', sub: 'Same scene, you press the buttons' },
+    { go: 'deeper', n: icon('deeper'), title: 'Go deeper', sub: `Optional · ${current.deeper.note}` },
     { go: 'next', n: next ? next.n : '✓', title: next ? `Next: ${next.title}` : 'Back to the map', sub: next ? next.tagline : 'More lessons are coming' },
   ];
   $('path').innerHTML = steps.map(st => {
-    const done = seen.includes(st.go), cls = [done && 'done', st.go === upNext && 'up-next', st.go === mode && 'current'].filter(Boolean).join(' ');
+    const done = seen.includes(st.go), cls = [`tone-${st.go}`, done && 'done', st.go === upNext && 'up-next', st.go === mode && 'current'].filter(Boolean).join(' ');
     const state = st.go === upNext ? 'Up next' : done ? (st.go === mode ? '✓ Just done' : '✓ Done') : '';
     const body = `<span class="n">${done ? '✓' : st.n}</span><b>${esc(st.title)}</b><small>${esc(st.sub)}</small>${state ? `<span class="state">${state}</span>` : ''}`;
     return st.go === 'next'
@@ -215,6 +249,8 @@ function renderDots(steps) {
 }
 function renderStep(i, step) {
   const steps = player.track.steps;
+  progress.last = { id: current.id, mode, step: i };
+  save('kafka-learn-progress', progress);
   showRecap(false);
   clearSpotlight();
   $('step-count').textContent = `${mode === 'deeper' ? 'Deep dive · ' : ''}Step ${i + 1} of ${steps.length}`;
@@ -249,6 +285,8 @@ setSpeed(speed);
 // ---------- try it ----------
 function openTry() {
   player.stop();
+  progress.last = { id: current.id, mode: 'try', step: 0 };
+  save('kafka-learn-progress', progress);
   clearSpotlight();
   const t = current.tryIt, input = {};
   for (const c of t.controls) if (c.type === 'choice') input[c.name] = c.options[0];
@@ -316,11 +354,13 @@ function answer(i, record = true) {
 
 // ---------- routing & keys ----------
 function route() {
-  const l = lessonById(location.hash.replace(/^#\/?/, ''));
+  // #/<lesson>[/<mode>/<step>] — the optional part resumes where you left off, then is dropped from the URL.
+  const [id, resumeMode, resumeStep] = location.hash.replace(/^#\/?/, '').split('/'), l = lessonById(id);
+  if (l && resumeMode) history.replaceState(null, '', `#/${id}`);
   $('map-view').hidden = !!l;
   $('lesson-view').hidden = !l;
   document.body.classList.toggle('lesson-mode', !!l);
-  if (l) openLesson(l);
+  if (l) openLesson(l, { mode: resumeMode, step: +resumeStep || 0 });
   else { player.stop(); stage.reset(); current = null; renderMap(); document.title = 'Learn Kafka'; if (document.fullscreenElement) document.exitFullscreen(); }
   window.scrollTo(0, 0);
 }
@@ -328,11 +368,11 @@ addEventListener('hashchange', route);
 addEventListener('keydown', e => {
   if (!current || e.ctrlKey || e.metaKey || e.altKey || e.target.closest('input, textarea, select')) return;
   const k = e.key.toLowerCase();
-  if (k === 'f') return setFocus(!focusOn);
+  if (k === 'f') return toggleFullscreen();
   if (k === 'g') return setGuide(!guideOn);
   if (k === 'r') return showRecap($('recap').hidden);
   if (e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { const a = $(e.key === 'ArrowRight' ? 'next-lesson' : 'prev-lesson'); if (!a.classList.contains('disabled')) location.hash = a.getAttribute('href'); return; }
-  if (e.key === 'Escape' && !document.fullscreenElement) { if (!$('recap').hidden) showRecap(false); else if (focusOn) setFocus(false); return; }
+  if (e.key === 'Escape' && !document.fullscreenElement) { if (!$('recap').hidden) showRecap(false); return; }
   if (mode === 'try' || e.target.closest('button, a')) return;
   if (e.key === ' ') { e.preventDefault(); player.toggle(); }
   else if (e.key === 'ArrowRight') player.next();
@@ -340,6 +380,5 @@ addEventListener('keydown', e => {
 });
 
 setGuide(guideOn);
-setFocus(focusOn);
 route();
 window.kafkaLearn = { player, stage, progress, get mode() { return mode; }, get lesson() { return current?.id; }, get tryState() { return tryState; } };

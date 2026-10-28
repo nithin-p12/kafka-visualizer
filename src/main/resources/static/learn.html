@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="application-name" content="Kafka Visualizer" />
     <title>Learn Kafka</title>
-    <link rel="stylesheet" href="/learn/learn.css?v=20261028-3" />
+    <link rel="stylesheet" href="/learn/learn.css?v=20261028-4" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
@@ -23,24 +23,23 @@
     </header>
 
     <main id="map-view" class="map" hidden>
-      <div class="map-intro">
-        <h1>Understand Kafka one piece at a time</h1>
-        <p>Start with single components (atoms). Then see how pairs of them connect (links), and finally follow one message end to end. Each lesson plays by itself. You can pause, step and replay at any time.</p>
-        <div class="map-progress"><div class="track"><span id="map-bar"></span></div><span id="map-progress"></span></div>
-        <p id="map-next" class="map-next"></p>
+      <section class="map-hero">
+        <div class="map-intro">
+          <h1>Understand Kafka one piece at a time</h1>
+          <p>Single components first, then how pairs of them connect, then one message end to end.</p>
+          <div class="map-progress"><div class="track"><span id="map-bar"></span></div><span id="map-progress"></span></div>
+        </div>
+        <a id="continue" class="continue-card" href="#/"></a>
+      </section>
+      <div class="how guide-only" id="map-guide" aria-label="How each lesson works">
+        <span class="how-label">Each lesson</span>
+        <span class="pill tone-watch"><i class="ico" data-icon="watch"></i><b>Watch</b> ~2 min animation</span><span class="how-sep">›</span
+        ><span class="pill tone-try"><i class="ico" data-icon="try"></i><b>Try it</b> you press the buttons</span><span class="how-sep">›</span
+        ><span class="pill tone-deeper"><i class="ico" data-icon="deeper"></i><b>Go deeper</b> optional</span><span class="how-sep">›</span
+        ><span class="pill tone-recap"><i class="ico" data-icon="recap"></i><b>Recap</b> interview Q&amp;A</span>
+        <span class="how-keys"><kbd>Space</kbd> pause <kbd>←</kbd><kbd>→</kbd> steps <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> topics <kbd>F</kbd> full screen</span>
       </div>
-      <aside class="guide-card guide-only" id="map-guide">
-        <div class="eyebrow">Guide</div>
-        <h2>How to use this</h2>
-        <ol>
-          <li><b>Go in order.</b> Each lesson builds on the one before. Start with <b>1 · Record</b>.</li>
-          <li><b>Watch</b> (about 2 minutes): the animation explains one component step by step.</li>
-          <li><b>Try it</b>: the same scene, but you press the buttons and see what happens.</li>
-          <li><b>Quick check</b>: one interview-style question.</li>
-          <li><b>Go deeper</b> tabs and <b>Level 4</b> are optional. Skip them until the basic flow makes sense.</li>
-        </ol>
-        <p class="hint">Turn off <b>Guide me</b> at the top right to hide these hints and the purple spotlights.</p>
-      </aside>
+      <nav id="level-nav" class="level-nav" aria-label="Jump to a level"></nav>
       <div id="levels"></div>
     </main>
 
@@ -62,13 +61,13 @@
           </span>
         </div>
         <nav class="modes" aria-label="Lesson path">
-          <button data-mode="watch" title="Animated walkthrough">① Watch</button
+          <button data-mode="watch" class="tone-watch" title="Animated walkthrough"><i class="ico" data-icon="watch"></i>Watch</button
           ><span class="sep" aria-hidden="true">›</span
-          ><button data-mode="try" title="Same scene, you press the buttons">② Try it</button
+          ><button data-mode="try" class="tone-try" title="Same scene, you press the buttons"><i class="ico" data-icon="try"></i>Try it</button
           ><span class="sep" aria-hidden="true">›</span
-          ><button data-mode="deeper" title="Optional internals">③ Go deeper <small>optional</small></button
+          ><button data-mode="deeper" class="tone-deeper" title="Optional internals"><i class="ico" data-icon="deeper"></i>Go deeper <small>optional</small></button
           ><span class="sep" aria-hidden="true">›</span
-          ><button data-mode="recap" id="recap-tab" title="Takeaway, interview answers and quick check (R)">④ Recap</button>
+          ><button data-mode="recap" id="recap-tab" class="tone-recap" title="Takeaway, interview answers and quick check (R)"><i class="ico" data-icon="recap"></i>Recap</button>
         </nav>
       </div>
 
@@ -78,8 +77,7 @@
           <p id="deeper-note" class="stage-badge deeper-note" hidden><b>Optional deep dive:</b> <span id="deeper-text"></span></p>
           <div class="view-tools">
             <button id="guide-btn" class="tool" title="Guide: spotlights and hints (G)">👀 Guide</button
-            ><button id="focus-btn" class="tool" title="Focus mode: hide everything but the lesson (F)">⤢ Focus</button
-            ><button id="full-btn" class="tool" title="Full screen">⛶</button>
+            ><button id="full-btn" class="tool" title="Full screen (F)">⛶ Full screen</button>
           </div>
           <div id="callout" class="callout guide-only" hidden aria-live="polite"><b>👀 Watch for</b> <span id="g-observe"></span></div>
           <section id="recap" class="recap" hidden aria-label="Recap">
@@ -135,11 +133,11 @@
           <div id="try-controls" class="try-controls"></div>
           <div class="try-foot">
             <p id="try-readout" class="readout" aria-live="polite"></p>
-            <button id="try-recap" title="Takeaway, interview answers and quick check">Done? ④ Recap →</button>
+            <button id="try-recap" title="Takeaway, interview answers and quick check">Done? Recap →</button>
           </div>
         </div>
       </div>
     </main>
-    <script type="module" src="/learn/learn.js?v=20261028-3"></script>
+    <script type="module" src="/learn/learn.js?v=20261028-4"></script>
   </body>
 </html>
