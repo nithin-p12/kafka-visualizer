@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="application-name" content="Kafka Visualizer" />
     <title>Learn Kafka</title>
-    <link rel="stylesheet" href="/learn/learn.css?v=20261028-4" />
+    <link rel="stylesheet" href="/learn/learn.css?v=20261028-5" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
@@ -79,7 +79,15 @@
             <button id="guide-btn" class="tool" title="Guide: spotlights and hints (G)">👀 Guide</button
             ><button id="full-btn" class="tool" title="Full screen (F)">⛶ Full screen</button>
           </div>
-          <div id="callout" class="callout guide-only" hidden aria-live="polite"><b>👀 Watch for</b> <span id="g-observe"></span></div>
+          <div id="guide-card" class="guide-card-run" hidden aria-live="polite">
+            <div class="gc-head"><span class="eyebrow" id="step-count"></span><button id="gc-min" class="gc-min" title="Minimise the guide (M)" aria-expanded="true">–</button></div>
+            <h2 id="step-title"></h2>
+            <div class="gc-body">
+              <p id="step-text"></p>
+              <p class="gc-watch guide-only"><b>👀 Watch for</b> <span id="g-observe"></span></p>
+              <p class="gc-next">Next: <span id="g-next"></span></p>
+            </div>
+          </div>
           <section id="recap" class="recap" hidden aria-label="Recap">
             <div class="recap-head">
               <div><span class="eyebrow">Recap</span><h2 id="recap-title"></h2></div>
@@ -108,15 +116,7 @@
         </div>
 
         <div id="player-ui" class="player-ui">
-          <div class="caption" aria-live="polite">
-            <div class="caption-head">
-              <span class="eyebrow" id="step-count"></span>
-              <h2 id="step-title"></h2>
-              <span class="caption-next guide-only">Next: <span id="g-next"></span></span>
-            </div>
-            <p id="step-text"></p>
-            <div class="hold"><span id="hold-bar"></span></div>
-          </div>
+          <div class="hold" title="Time left on this step"><span id="hold-bar"></span></div>
           <div class="controls">
             <button id="prev-step" title="Previous step (←)">⏮ Prev</button
             ><button id="play" class="primary" title="Pause / play (Space)">⏸ Pause</button
@@ -138,6 +138,6 @@
         </div>
       </div>
     </main>
-    <script type="module" src="/learn/learn.js?v=20261028-4"></script>
+    <script type="module" src="/learn/learn.js?v=20261028-5"></script>
   </body>
 </html>

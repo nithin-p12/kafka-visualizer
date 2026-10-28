@@ -21,6 +21,7 @@ export class Player {
     stage.clock.instant = false;
     if (run !== this.run) return;
     this.v = v;
+    this.on.started?.(i, track.steps[i], v);
     try {
       await track.steps[i].run(stage, v);
       if (run !== this.run) return;

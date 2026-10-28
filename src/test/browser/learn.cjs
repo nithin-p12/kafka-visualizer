@@ -45,7 +45,7 @@ const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker'];
         await ready(i => window.kafkaLearn.player.i === i && window.kafkaLearn.player.phase === 'waiting', i);
         assert.equal(await page.locator('#step-count').textContent(), `Step ${i + 1} of ${steps}`);
         assert((await page.locator('#g-observe').textContent()).length > 5, `${id} step ${i} has an observe hint`);
-        if (await page.locator('.learn-ring').count()) assert(await page.locator('#callout').isVisible(), `${id} step ${i} shows the guide callout`);
+        assert(await page.locator('#guide-card').isVisible(), `${id} step ${i} shows the guide card`);
         await shot(`${id}-watch-${i + 1}`);
       }
       assert.equal(await page.locator('#play').innerText(), '▶ Continue');
@@ -111,7 +111,7 @@ const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker'];
     assert(!(await page.locator('#guide-toggle').isChecked()));
     await page.waitForTimeout(1500);
     assert.equal(await page.locator('.learn-ring').count(), 0, 'no spotlights when guide is off');
-    assert(!(await page.locator('#callout').isVisible()));
+    assert(!(await page.locator('#guide-card .gc-watch').isVisible()), 'no "watch for" hints when guide is off');
     await page.locator('#guide-btn').click();
     assert(await page.locator('#guide-toggle').isChecked());
 

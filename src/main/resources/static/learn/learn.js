@@ -23,6 +23,7 @@ let pausedByRecap = false, current = null, mode = 'watch', guideOn = read('kafka
 
 const player = new Player(stage, {
   step(i, step) { renderStep(i, step); },
+  started() { placeGuide({ keep: true }); },
   settled(i, step, v) { if (guideOn && step.focus) spotlight(step.focus(v)); },
   hold(t) { $('hold-bar').style.width = `${t * 100}%`; },
   state: renderPlayState,
@@ -34,33 +35,73 @@ const player = new Player(stage, {
 });
 
 // ---------- guide ----------
-// Spotlight rings in the SVG, plus the "watch for" callout placed beside them inside the stage.
+// One guide card carries the whole step (title, explanation, what to watch, what's next) inside the scene.
+// While a step animates it sits wherever it covers the least; once the step settles it moves beside the spotlight.
 function spotlight(nodes) {
   stage.spotlight(nodes);
-  placeCallout();
+  placeGuide();
 }
-function placeCallout() {
-  const c = $('callout'), rings = [...stage.fx.children];
-  if (!guideOn || !rings.length || !$('g-observe').textContent || !$('recap').hidden) { c.hidden = true; return; }
-  c.hidden = false;
-  const wrap = $('stage-wrap').getBoundingClientRect(), boxes = rings.map(r => r.getBoundingClientRect());
-  const r = { left: Math.min(...boxes.map(b => b.left)) - wrap.left, top: Math.min(...boxes.map(b => b.top)) - wrap.top, right: Math.max(...boxes.map(b => b.right)) - wrap.left, bottom: Math.max(...boxes.map(b => b.bottom)) - wrap.top };
-  const w = c.offsetWidth, h = c.offsetHeight, gap = 10, m = 8, top = 44, cx = (r.left + r.right - w) / 2, cy = (r.top + r.bottom - h) / 2;
-  const clamp = ([x, y]) => [Math.max(m, Math.min(x, wrap.width - w - m)), Math.max(top, Math.min(y, wrap.height - h - m))];
-  // Candidate spots around the spotlight, in order of preference; pick the one covering the least of the scene.
-  const options = [[cx, r.bottom + gap], [cx, r.top - gap - h], [r.right + gap, cy], [r.left - gap - w, cy],
-    [r.left, r.bottom + gap], [r.right - w, r.bottom + gap], [r.left, r.top - gap - h], [r.right - w, r.top - gap - h],
-    [r.right + gap, r.top], [r.right + gap, r.bottom - h], [r.left - gap - w, r.top], [r.left - gap - w, r.bottom - h]].map(clamp);
-  const content = [...stage.root.querySelectorAll('text, rect, line')].filter(n => +(n.closest('[opacity]')?.getAttribute('opacity') ?? 1) > .2)
-    .map(n => { const b = n.getBoundingClientRect(); return { l: b.left - wrap.left, t: b.top - wrap.top, r: b.right - wrap.left, b: b.bottom - wrap.top, k: n.tagName === 'text' ? 4 : 1 }; });
-  const overlap = (x, y, a) => Math.max(0, Math.min(x + w, a.r) - Math.max(x, a.l)) * Math.max(0, Math.min(y + h, a.b) - Math.max(y, a.t));
-  const cost = ([x, y]) => content.reduce((sum, a) => sum + overlap(x, y, a) * a.k, 0) + overlap(x, y, { l: r.left, t: r.top, r: r.right, b: r.bottom }) * 4;
-  let best = options[0], bestCost = Infinity;
-  for (const o of options) { const k = cost(o); if (k < bestCost - 1) { best = o; bestCost = k; } }
-  c.style.left = `${best[0]}px`; c.style.top = `${best[1]}px`;
+let guidePos = null;
+function placeGuide({ keep = false } = {}) {
+  const c = $('guide-card');
+  c.hidden = !(current && mode !== 'try' && $('recap').hidden && player.track);
+  if (c.hidden || getComputedStyle(c).position === 'static') return;
+  const rings = guideOn ? [...stage.fx.children] : [];
+  const wrap = $('stage-wrap').getBoundingClientRect(), W = wrap.width, H = wrap.height, m = 10, top = 44;
+  let r = null;
+  if (rings.length) {
+    const boxes = rings.map(b => b.getBoundingClientRect());
+    r = { l: Math.min(...boxes.map(b => b.left)) - wrap.left, t: Math.min(...boxes.map(b => b.top)) - wrap.top, r: Math.max(...boxes.map(b => b.right)) - wrap.left, b: Math.max(...boxes.map(b => b.bottom)) - wrap.top };
+  }
+  // What the card must not hide: text worst, then filled blocks, then outlines and arrows. The spotlight itself is off limits.
+  const visible = n => +(n.closest('[opacity]')?.getAttribute('opacity') ?? 1) > .2;
+  const weight = n => n.tagName === 'text' ? 10 : n.tagName === 'rect' && !/^(#fff|#ffffff|none|white)$/i.test(n.getAttribute('fill') ?? 'none') ? 3 : 1;
+  const content = [...stage.root.querySelectorAll('text, rect, line')].filter(visible)
+    .map(n => { const b = n.getBoundingClientRect(); return { l: b.left - wrap.left, t: b.top - wrap.top, r: b.right - wrap.left, b: b.bottom - wrap.top, k: weight(n), box: n.tagName === 'rect' }; });
+  if (r) content.push({ ...r, k: 20 });
+
+  // Try a few card shapes (narrow and tall, wide and short) and every spot on a grid; keep the cheapest.
+  const min = c.classList.contains('min');
+  const widths = min ? [null] : [...new Set([400, 520, 660].map(x => Math.round(Math.min(x, W - 2 * m))))];
+  let pick = null;
+  for (const width of widths) {
+    c.style.width = width ? `${width}px` : '';
+    const w = c.offsetWidth, h = c.offsetHeight;
+    if (h > H - top - m) continue;
+    const clamp = ([x, y]) => [Math.max(m, Math.min(x, W - w - m)), Math.max(top, Math.min(y, H - h - m))];
+    const overlap = (x, y, a) => Math.max(0, Math.min(x + w, a.r) - Math.max(x, a.l)) * Math.max(0, Math.min(y + h, a.b) - Math.max(y, a.t));
+    // Cutting across a box's outline looks worse than sitting fully inside or outside it.
+    const crosses = (x, y, a) => a.box && overlap(x, y, a) > 0 && !(x >= a.l && x + w <= a.r && y >= a.t && y + h <= a.b) ? 4000 : 0;
+    // Stay close to the spotlight (or, with none, to the stage edges) but never at the price of covering the scene.
+    const near = (x, y) => r ? Math.hypot(Math.max(0, r.l - (x + w), x - r.r), Math.max(0, r.t - (y + h), y - r.b)) * 60
+      : Math.min(x - m, W - w - m - x, y - top, H - h - m - y) * 20;
+    // Wider cards are a little harder to read, so they must earn their place.
+    const cost = ([x, y]) => content.reduce((sum, a) => sum + overlap(x, y, a) * a.k + crosses(x, y, a), 0) + near(x, y) + (width ?? 0) * 4;
+    let best = clamp([W - w - m, top]), bestCost = cost(best);
+    for (let y = top; y <= H - h - m + 1; y += 24) for (let x = m; x <= W - w - m + 1; x += 24) {
+      const k = cost([x, y]);
+      if (k < bestCost) { best = [x, y]; bestCost = k; }
+    }
+    // Between steps, stay put unless the new scene makes the current spot clearly worse: less jumping around.
+    if (keep && guidePos?.width === width) { const now = clamp(guidePos.at); const k = cost(now); if (k <= bestCost * 1.1 + 300) { best = now; bestCost = k - 1; } }
+    if (!pick || bestCost < pick.cost) pick = { width, at: best, cost: bestCost };
+  }
+  if (!pick) pick = { width: widths.at(-1), at: [m, top] };
+  c.style.width = pick.width ? `${pick.width}px` : '';
+  guidePos = pick;
+  c.style.left = `${pick.at[0]}px`; c.style.top = `${pick.at[1]}px`;
 }
-new ResizeObserver(placeCallout).observe($('stage-wrap'));
-function clearSpotlight() { stage.clearSpotlight(); $('callout').hidden = true; }
+new ResizeObserver(() => placeGuide({ keep: true })).observe($('stage-wrap'));
+function clearSpotlight() { stage.clearSpotlight(); }
+const setGuideMin = on => {
+  $('guide-card').classList.toggle('min', on);
+  $('gc-min').textContent = on ? '+' : '–';
+  $('gc-min').title = on ? 'Show the full guide (M)' : 'Minimise the guide (M)';
+  $('gc-min').setAttribute('aria-expanded', !on);
+  save('kafka-learn-guide-min', on);
+  placeGuide({ keep: true });
+};
+$('gc-min').addEventListener('click', () => setGuideMin(!$('guide-card').classList.contains('min')));
 
 function setGuide(on) {
   guideOn = on; save('kafka-learn-guide', on);
@@ -214,8 +255,8 @@ function showRecap(on) {
   $('recap-dot')?.classList.toggle('current', on);
   $('recap-back').textContent = MODE_NAMES[mode];
   renderTabs();
-  if (on) { $('callout').hidden = true; renderPath(); if (mode !== 'try' && player.phase !== 'done' && !player.userPaused) { player.pause(); pausedByRecap = true; } }
-  else { placeCallout(); if (pausedByRecap && mode !== 'try' && player.userPaused) player.play(); pausedByRecap = false; }
+  if (on) { placeGuide(); renderPath(); if (mode !== 'try' && player.phase !== 'done' && !player.userPaused) { player.pause(); pausedByRecap = true; } }
+  else { placeGuide({ keep: true }); if (pausedByRecap && mode !== 'try' && player.userPaused) player.play(); pausedByRecap = false; }
   renderPlayState();
 }
 // Suggested order: Watch › Try it › Go deeper › next topic. Every card works at any time.
@@ -371,6 +412,7 @@ addEventListener('keydown', e => {
   if (k === 'f') return toggleFullscreen();
   if (k === 'g') return setGuide(!guideOn);
   if (k === 'r') return showRecap($('recap').hidden);
+  if (k === 'm') return setGuideMin(!$('guide-card').classList.contains('min'));
   if (e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { const a = $(e.key === 'ArrowRight' ? 'next-lesson' : 'prev-lesson'); if (!a.classList.contains('disabled')) location.hash = a.getAttribute('href'); return; }
   if (e.key === 'Escape' && !document.fullscreenElement) { if (!$('recap').hidden) showRecap(false); return; }
   if (mode === 'try' || e.target.closest('button, a')) return;
@@ -380,5 +422,6 @@ addEventListener('keydown', e => {
 });
 
 setGuide(guideOn);
+setGuideMin(read('kafka-learn-guide-min', false));
 route();
 window.kafkaLearn = { player, stage, progress, get mode() { return mode; }, get lesson() { return current?.id; }, get tryState() { return tryState; } };
