@@ -146,7 +146,8 @@ a.card:hover { border-color: var(--lv); box-shadow: 0 6px 18px #20334714; transf
 
 .stage-card { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #fff; border: 1px solid #e3e6ee; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px #2a345012; }
 .stage-wrap { position: relative; flex: 1; min-height: 240px; }
-#stage { position: absolute; inset: 0; display: block; width: 100%; height: 100%; font-family: "Segoe UI", Arial, sans-serif; }
+#stage, #ghost { position: absolute; inset: 0; display: block; width: 100%; height: 100%; font-family: "Segoe UI", Arial, sans-serif; }
+#ghost { visibility: hidden; pointer-events: none; }
 #stage text { user-select: none; }
 .stage-wrap.paused::after { content: "Paused"; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 650; color: var(--muted); background: #f0f1f2; padding: 2px 10px; border-radius: 10px; }
 .learn-ring { fill: #9d4ccc; fill-opacity: .06; stroke: var(--guide); stroke-width: 2.5; stroke-dasharray: 7 5; animation: ring 1.6s ease-in-out infinite; pointer-events: none; }
@@ -168,9 +169,10 @@ a.card:hover { border-color: var(--lv); box-shadow: 0 6px 18px #20334714; transf
 .gc-watch { margin: 0 -6px; padding: 7px 9px; border-radius: 6px; background: var(--guide-soft); font-size: 13.5px; line-height: 1.45; color: #4a2f5c; }
 .gc-watch b { color: var(--guide); white-space: nowrap; }
 .gc-next { font-size: 12px; color: var(--muted); }
-.guide-card-run.min { width: auto; min-width: 0; max-width: 340px; }
-.guide-card-run.min .gc-body { display: none; }
-.guide-card-run.min h2 { font-size: 14.5px; margin-bottom: 0; }
+.guide-card-run.v-nonext .gc-next, .guide-card-run.v-nowatch .gc-watch { display: none; }
+.guide-card-run.v-title { width: auto; max-width: 340px; }
+.guide-card-run.v-title .gc-body { display: none; }
+.guide-card-run.v-title h2 { font-size: 14.5px; margin-bottom: 0; }
 @keyframes callout-in { from { opacity: 0; transform: translateY(4px); } }
 
 .player-ui, .try-panel { flex: none; border-top: 1px solid #eceef0; padding: 10px 16px 12px; display: grid; gap: 10px; }
@@ -293,6 +295,7 @@ a.card:hover { border-color: var(--lv); box-shadow: 0 6px 18px #20334714; transf
   .path-step + .path-step::before { display: none; }
   .stage-wrap { flex: none; min-height: 0; overflow-x: auto; }
   #stage { position: static; width: 760px; height: auto; aspect-ratio: 960 / 460; }
+  #ghost { display: none; }
   .recap { position: static; }
   .recap[hidden] { display: none; }
   .dots { order: 5; width: 100%; justify-content: center; margin: 4px 0 0; }

@@ -19,11 +19,18 @@ const ICONS = {
 const icon = name => `<i class="ico">${ICONS[name]}</i>`;
 for (const i of document.querySelectorAll('[data-icon]')) i.innerHTML = ICONS[i.dataset.icon];
 const stage = new Stage($('stage'));
+// An invisible twin of the stage, laid exactly over it: each step is run there instantly first, so the guide card
+// can be placed against the step's final picture (and its spotlight) before the step plays, and then stay put.
+const ghost = new Stage($('ghost'));
 let pausedByRecap = false, current = null, mode = 'watch', guideOn = read('kafka-learn-guide', true), tryState = null;
 
 const player = new Player(stage, {
   step(i, step) { renderStep(i, step); },
-  started() { placeGuide({ keep: true }); },
+  async started(i) {
+    const run = ++previewRun;
+    const preview = await previewStep(i);
+    if (run === previewRun && player.i === i) { lastPreview = preview; placeGuide({ keep: true }); }
+  },
   settled(i, step, v) { if (guideOn && step.focus) spotlight(step.focus(v)); },
   hold(t) { $('hold-bar').style.width = `${t * 100}%`; },
   state: renderPlayState,
@@ -39,69 +46,119 @@ const player = new Player(stage, {
 // While a step animates it sits wherever it covers the least; once the step settles it moves beside the spotlight.
 function spotlight(nodes) {
   stage.spotlight(nodes);
-  placeGuide();
+  if (!lastPreview) placeGuide();
 }
-let guidePos = null;
+let guidePos = null, lastPreview = null, previewRun = 0;
+const visible = n => +(n.closest('[opacity]')?.getAttribute('opacity') ?? 1) > .2;
+// What the card must not hide: text worst, then filled blocks, then outlines and arrows.
+const weight = n => n.tagName === 'text' ? 10 : n.tagName === 'rect' && !/^(#fff|#ffffff|none|white)$/i.test(n.getAttribute('fill') ?? 'none') ? 3 : 1;
+const sceneRects = root => [...root.querySelectorAll('text, rect, line')].filter(visible)
+  .map(n => { const b = n.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, k: weight(n), box: n.tagName === 'rect' }; });
+// Run the current track up to step i on the ghost stage and report where everything ends up.
+async function previewStep(i) {
+  const track = player.track;
+  try {
+    ghost.reset();
+    ghost.clock.instant = true;
+    const v = track.build(ghost);
+    for (let k = 0; k <= i; k++) await track.steps[k].run(ghost, v);
+    // The real ring is drawn 8 units out with a pulsing ~4-unit stroke; keep clear of all of it.
+    const pad = 14 * Math.min($('ghost').getBoundingClientRect().width / 960, $('ghost').getBoundingClientRect().height / 460);
+    const focus = (track.steps[i].focus?.(v) ?? []).filter(n => n?.isConnected && n.ownerSVGElement === $('ghost'))
+      .map(n => n.getBoundingClientRect()).map(b => ({ left: b.left - pad, top: b.top - pad, right: b.right + pad, bottom: b.bottom + pad }));
+    return { content: sceneRects(ghost.root), focus };
+  } catch (e) { return null; }
+}
 function placeGuide({ keep = false } = {}) {
   const c = $('guide-card');
   c.hidden = !(current && mode !== 'try' && $('recap').hidden && player.track);
   if (c.hidden || getComputedStyle(c).position === 'static') return;
-  const rings = guideOn ? [...stage.fx.children] : [];
   const wrap = $('stage-wrap').getBoundingClientRect(), W = wrap.width, H = wrap.height, m = 10, top = 44;
-  let r = null;
-  if (rings.length) {
-    const boxes = rings.map(b => b.getBoundingClientRect());
-    r = { l: Math.min(...boxes.map(b => b.left)) - wrap.left, t: Math.min(...boxes.map(b => b.top)) - wrap.top, r: Math.max(...boxes.map(b => b.right)) - wrap.left, b: Math.max(...boxes.map(b => b.bottom)) - wrap.top };
-  }
-  // What the card must not hide: text worst, then filled blocks, then outlines and arrows. The spotlight itself is off limits.
-  const visible = n => +(n.closest('[opacity]')?.getAttribute('opacity') ?? 1) > .2;
-  const weight = n => n.tagName === 'text' ? 10 : n.tagName === 'rect' && !/^(#fff|#ffffff|none|white)$/i.test(n.getAttribute('fill') ?? 'none') ? 3 : 1;
-  const content = [...stage.root.querySelectorAll('text, rect, line')].filter(visible)
-    .map(n => { const b = n.getBoundingClientRect(); return { l: b.left - wrap.left, t: b.top - wrap.top, r: b.right - wrap.left, b: b.bottom - wrap.top, k: weight(n), box: n.tagName === 'rect' }; });
-  if (r) content.push({ ...r, k: 20 });
+  const local = b => ({ l: b.left - wrap.left, t: b.top - wrap.top, r: b.right - wrap.left, b: b.bottom - wrap.top });
+  // Avoid both what is on screen now and what the step will have drawn by its end (from the ghost preview).
+  const boxes = guideOn ? (lastPreview ? lastPreview.focus : [...stage.fx.children].map(b => b.getBoundingClientRect())) : [];
+  const r = boxes.length ? local({ left: Math.min(...boxes.map(b => b.left)), top: Math.min(...boxes.map(b => b.top)), right: Math.max(...boxes.map(b => b.right)), bottom: Math.max(...boxes.map(b => b.bottom)) }) : null;
+  const content = [...sceneRects(stage.root), ...(lastPreview?.content ?? [])].map(a => ({ ...local(a), k: a.k, box: a.box }));
+  // Whatever the step is explaining (its spotlight) is off limits: covering it costs more than any other choice.
+  for (const b of boxes) content.push({ ...local(b), k: 1000 });
 
-  // Try a few card shapes (narrow and tall, wide and short) and every spot on a grid; keep the cheapest.
-  const min = c.classList.contains('min');
-  const widths = min ? [null] : [...new Set([400, 520, 660].map(x => Math.round(Math.min(x, W - 2 * m))))];
+  // Try card shapes (narrow and tall to wide and short) at every spot on a grid. If even the best spot would hide
+  // text or the spotlight, fall back to a shorter card (no "Next", then no "Watch for", then just the title) rather
+  // than cover what the step explains. The card's + button shows everything again for this step.
+  const variants = guideMinOn ? [['v-title']] : guideFullStep ? [[]] : [[], ['v-nonext'], ['v-nonext', 'v-nowatch'], ['v-title']];
   let pick = null;
-  for (const width of widths) {
-    c.style.width = width ? `${width}px` : '';
-    const w = c.offsetWidth, h = c.offsetHeight;
-    if (h > H - top - m) continue;
-    const clamp = ([x, y]) => [Math.max(m, Math.min(x, W - w - m)), Math.max(top, Math.min(y, H - h - m))];
-    const overlap = (x, y, a) => Math.max(0, Math.min(x + w, a.r) - Math.max(x, a.l)) * Math.max(0, Math.min(y + h, a.b) - Math.max(y, a.t));
-    // Cutting across a box's outline looks worse than sitting fully inside or outside it.
-    const crosses = (x, y, a) => a.box && overlap(x, y, a) > 0 && !(x >= a.l && x + w <= a.r && y >= a.t && y + h <= a.b) ? 4000 : 0;
-    // Stay close to the spotlight (or, with none, to the stage edges) but never at the price of covering the scene.
-    const near = (x, y) => r ? Math.hypot(Math.max(0, r.l - (x + w), x - r.r), Math.max(0, r.t - (y + h), y - r.b)) * 60
-      : Math.min(x - m, W - w - m - x, y - top, H - h - m - y) * 20;
-    // Wider cards are a little harder to read, so they must earn their place.
-    const cost = ([x, y]) => content.reduce((sum, a) => sum + overlap(x, y, a) * a.k + crosses(x, y, a), 0) + near(x, y) + (width ?? 0) * 4;
-    let best = clamp([W - w - m, top]), bestCost = cost(best);
-    for (let y = top; y <= H - h - m + 1; y += 24) for (let x = m; x <= W - w - m + 1; x += 24) {
-      const k = cost([x, y]);
-      if (k < bestCost) { best = [x, y]; bestCost = k; }
+  for (const variant of variants) {
+    c.classList.remove('v-nonext', 'v-nowatch', 'v-title');
+    c.classList.add(...variant);
+    const titleOnly = variant.includes('v-title');
+    const widths = titleOnly ? [null] : [...new Set([320, 400, 520, 660].map(x => Math.round(Math.min(x, W - 2 * m))))];
+    let free = null, any = null, stayed = null;
+    for (const width of widths) {
+      c.style.width = width ? `${width}px` : '';
+      const w = c.offsetWidth, h = c.offsetHeight;
+      if (h > H - top - m) continue;
+      const clamp = ([x, y]) => [Math.max(m, Math.min(x, W - w - m)), Math.max(top, Math.min(y, H - h - m))];
+      const overlap = (x, y, a) => Math.max(0, Math.min(x + w, a.r) - Math.max(x, a.l)) * Math.max(0, Math.min(y + h, a.b) - Math.max(y, a.t));
+      // Cutting across a box's outline looks worse than sitting fully inside or outside it.
+      const crosses = (x, y, a) => a.box && overlap(x, y, a) > 0 && !(x >= a.l && x + w <= a.r && y >= a.t && y + h <= a.b) ? 4000 : 0;
+      // Stay close to the spotlight (or, with none, to the stage edges) but never at the price of covering the scene.
+      const near = (x, y) => r ? Math.hypot(Math.max(0, r.l - (x + w), x - r.r), Math.max(0, r.t - (y + h), y - r.b)) * 60
+        : Math.min(x - m, W - w - m - x, y - top, H - h - m - y) * 20;
+      // Wider cards are a little harder to read, so they must earn their place.
+      const cost = ([x, y]) => content.reduce((sum, a) => sum + overlap(x, y, a) * a.k + crosses(x, y, a), 0) + near(x, y) + (width ?? 0) * 4;
+      // "Serious": the card would hide text or the spotlight.
+      const serious = ([x, y]) => content.reduce((sum, a) => sum + (a.k >= 10 ? overlap(x, y, a) : 0), 0) > 40;
+      const consider = (at, k) => {
+        if (!any || k < any.cost) any = { variant, width, at, cost: k };
+        if (!serious(at) && (!free || k < free.cost)) free = { variant, width, at, cost: k };
+      };
+      // Between steps, stay put unless the new scene makes the current spot clearly worse: less jumping around.
+      const stay = keep && guidePos?.width === width && guidePos.variant.join() === variant.join() ? clamp(guidePos.at) : null;
+      for (let y = top; y <= H - h - m + 1; y += 24) for (let x = m; x <= W - w - m + 1; x += 24) consider([x, y], cost([x, y]));
+      consider(clamp([W - w - m, top]), cost(clamp([W - w - m, top])));
+      if (stay && !serious(stay)) stayed = { variant, width, at: stay, cost: cost(stay) };
     }
-    // Between steps, stay put unless the new scene makes the current spot clearly worse: less jumping around.
-    if (keep && guidePos?.width === width) { const now = clamp(guidePos.at); const k = cost(now); if (k <= bestCost * 1.1 + 300) { best = now; bestCost = k - 1; } }
-    if (!pick || bestCost < pick.cost) pick = { width, at: best, cost: bestCost };
+    if (stayed && free && stayed.cost <= free.cost * 1.1 + 300) free = stayed;
+    pick = free ?? pick ?? any;
+    if (free) break;
+    if (variant === variants.at(-1)) pick = any ?? pick;
   }
-  if (!pick) pick = { width: widths.at(-1), at: [m, top] };
+  pick ??= { variant: ['v-title'], width: null, at: [m, top] };
+  c.classList.remove('v-nonext', 'v-nowatch', 'v-title');
+  c.classList.add(...pick.variant);
   c.style.width = pick.width ? `${pick.width}px` : '';
   guidePos = pick;
   c.style.left = `${pick.at[0]}px`; c.style.top = `${pick.at[1]}px`;
+  const reduced = pick.variant.length > 0;
+  $('gc-min').textContent = reduced ? '+' : '–';
+  $('gc-min').title = reduced ? 'Show the whole guide (M)' : 'Minimise the guide (M)';
+  $('gc-min').setAttribute('aria-expanded', !reduced);
 }
-new ResizeObserver(() => placeGuide({ keep: true })).observe($('stage-wrap'));
+// The preview holds screen positions, so a resize re-runs it before re-placing the card.
+new ResizeObserver(async () => {
+  if (lastPreview && player.track && mode !== 'try') {
+    const run = ++previewRun, i = player.i, preview = await previewStep(i);
+    if (run !== previewRun || player.i !== i) return;
+    lastPreview = preview;
+  }
+  placeGuide({ keep: true });
+}).observe($('stage-wrap'));
 function clearSpotlight() { stage.clearSpotlight(); }
+// guideMinOn: the reader chose a title-only card (remembered). guideFullStep: the reader asked for the whole card on a
+// step where it had been shortened to stay clear of the scene (until the next step).
+let guideMinOn = false, guideFullStep = false;
 const setGuideMin = on => {
-  $('guide-card').classList.toggle('min', on);
-  $('gc-min').textContent = on ? '+' : '–';
-  $('gc-min').title = on ? 'Show the full guide (M)' : 'Minimise the guide (M)';
-  $('gc-min').setAttribute('aria-expanded', !on);
+  guideMinOn = on; guideFullStep = false;
   save('kafka-learn-guide-min', on);
   placeGuide({ keep: true });
 };
-$('gc-min').addEventListener('click', () => setGuideMin(!$('guide-card').classList.contains('min')));
+// + shows everything (undoing a minimise or an automatic shortening); – minimises.
+function toggleGuideCard() {
+  if (guideMinOn) setGuideMin(false);
+  else if (guidePos?.variant.length) { guideFullStep = true; placeGuide({ keep: true }); }
+  else setGuideMin(true);
+}
+$('gc-min').addEventListener('click', toggleGuideCard);
 
 function setGuide(on) {
   guideOn = on; save('kafka-learn-guide', on);
@@ -290,6 +347,8 @@ function renderDots(steps) {
 }
 function renderStep(i, step) {
   const steps = player.track.steps;
+  lastPreview = null;
+  guideFullStep = false;
   progress.last = { id: current.id, mode, step: i };
   save('kafka-learn-progress', progress);
   showRecap(false);
@@ -406,19 +465,41 @@ function route() {
   window.scrollTo(0, 0);
 }
 addEventListener('hashchange', route);
+// Lesson shortcuts work whatever has focus: a just-clicked button (Next, a dot, a tab) must not swallow Space or
+// the arrows. Space pauses/plays, ←/→ step (→ past the last step opens the recap), Shift+←/→ change topic.
 addEventListener('keydown', e => {
   if (!current || e.ctrlKey || e.metaKey || e.altKey || e.target.closest('input, textarea, select')) return;
+  const recapOn = !$('recap').hidden, playing = mode !== 'try';
+  const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+  if (dir && e.shiftKey) {
+    e.preventDefault();
+    const a = $(dir > 0 ? 'next-lesson' : 'prev-lesson');
+    if (!e.repeat && !a.classList.contains('disabled')) location.hash = a.getAttribute('href');
+    return;
+  }
+  if (e.key === ' ') {
+    e.preventDefault();
+    if (e.repeat) return;
+    if (recapOn) showRecap(false);
+    else if (playing) player.toggle();
+    return;
+  }
+  if (dir) {
+    e.preventDefault();
+    if (!playing) return;
+    if (recapOn) { if (dir < 0) showRecap(false); return; }
+    if (dir < 0) player.prev();
+    else if (player.i + 1 < player.count) player.next();
+    else showRecap(true);
+    return;
+  }
+  if (e.repeat || e.shiftKey) return;
   const k = e.key.toLowerCase();
-  if (k === 'f') return toggleFullscreen();
-  if (k === 'g') return setGuide(!guideOn);
-  if (k === 'r') return showRecap($('recap').hidden);
-  if (k === 'm') return setGuideMin(!$('guide-card').classList.contains('min'));
-  if (e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) { const a = $(e.key === 'ArrowRight' ? 'next-lesson' : 'prev-lesson'); if (!a.classList.contains('disabled')) location.hash = a.getAttribute('href'); return; }
-  if (e.key === 'Escape' && !document.fullscreenElement) { if (!$('recap').hidden) showRecap(false); return; }
-  if (mode === 'try' || e.target.closest('button, a')) return;
-  if (e.key === ' ') { e.preventDefault(); player.toggle(); }
-  else if (e.key === 'ArrowRight') player.next();
-  else if (e.key === 'ArrowLeft') player.prev();
+  if (k === 'f') toggleFullscreen();
+  else if (k === 'g') setGuide(!guideOn);
+  else if (k === 'r') showRecap(!recapOn);
+  else if (k === 'm') toggleGuideCard();
+  else if (e.key === 'Escape' && recapOn && !document.fullscreenElement) showRecap(false);
 });
 
 setGuide(guideOn);

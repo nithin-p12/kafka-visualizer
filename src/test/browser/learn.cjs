@@ -128,6 +128,17 @@ const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker'];
     await page.keyboard.press('Shift+ArrowLeft');
     await ready(() => window.kafkaLearn.lesson === 'topic');
 
+    // Shortcuts work whatever has focus: Space after clicking Next pauses instead of pressing Next again.
+    await page.locator('[data-mode="watch"]').click();
+    await page.locator('#next-step').click();
+    await ready(() => window.kafkaLearn.player.i === 1);
+    await page.keyboard.press('Space');
+    assert.equal(await page.evaluate(() => [window.kafkaLearn.player.i, window.kafkaLearn.player.userPaused].join()), '1,true', 'Space after Next pauses');
+    await page.keyboard.press('ArrowRight');
+    await ready(() => window.kafkaLearn.player.i === 2);
+    await page.keyboard.press('ArrowLeft');
+    await ready(() => window.kafkaLearn.player.i === 1);
+
     // Mobile layout: no horizontal page scroll.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(800);

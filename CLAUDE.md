@@ -36,7 +36,8 @@ The server runs on **http://127.0.0.1:8888** (`application.yaml`). `StartupUrls.
 - Readable scene text: SVG labels 15–19 units in the 960×460 viewBox; record blocks ~46×32.
 - Colours are soft and consistent. Lesson parts have one tone each (`.tone-watch` blue, `.tone-try` teal, `.tone-deeper` amber, `.tone-recap` purple) used in tabs, map strip and recap path. Levels have `.lv-atoms/.lv-links/.lv-e2e/.lv-deep`. Page background is `--paper` with a faint top glow.
 - Icons over numbered labels (see `ICONS` in `learn/learn.js`).
-- The guide is one in-scene card (step, explanation, "watch for", next), placed by `placeGuide()` to cover the least of the scene.
+- The guide is one in-scene card (step, explanation, "watch for", next), placed by `placeGuide()`. Before a step plays, it is run instantly on the invisible `#ghost` stage so the card is placed once against the step's final picture and spotlight, and does not move while the step plays. It must never cover the spotlight or scene text; when no spot is clear it shortens itself (no "Next", then no "Watch for", then title only) and **+** shows it all. Check placement across every step at 1365×900 and 1366×768 after changing a scene.
+- Keyboard (works whatever has focus): Space pause/play, ←/→ steps (→ past the last opens the recap, ← closes it), Shift+←/→ topics, F full screen, G guide, R recap, M shrink/expand guide card, Esc closes the recap. Enter still presses the focused button.
 - Lesson flow: Watch → Try it → Go deeper → Recap → next topic; every part reachable from the header tabs, the recap path and the ‹ › topic arrows.
 
 ## Learn code map
