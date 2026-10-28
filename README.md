@@ -29,7 +29,7 @@ In IntelliJ IDEA, import/reload the Maven project and run `com.kafka.visualizer.
 
 Open **http://localhost:8888/learn.html** (or the **Learn** card on the home page, or **📘 Learn** in the Visualizer toolbar). The learning map links to the Visualizer from its top bar; inside a lesson, the **Kafka** logo returns to the map. The learning map orders lessons from single components to end-to-end flow:
 
-1. **Atoms**: one component at a time. Built so far: Record, Topic, Partition, Offset, Broker. Cluster, replicas, producer, consumer, groups, commit/lag and retention appear as "coming soon".
+1. **Atoms**: one component at a time. Built so far: Record, Topic, Partition, Offset, Broker, Cluster, Replica. Producer, consumer, groups, commit/lag and retention appear as "coming soon".
 2. **Links**: how two components interact (key routing, acks, replication, election, assignment, rebalance, redelivery, multiple groups).
 3. **End to end**: one message's full journey, then the live Visualizer.
 4. **Deep dives (optional)**: ISR/high watermark, batching, idempotence, KRaft. Kept separate so the main path stays light.

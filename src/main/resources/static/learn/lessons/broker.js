@@ -56,7 +56,7 @@ export default {
   id: 'broker', n: 5, title: 'Broker', tagline: 'One Kafka server that stores partitions',
   guide: {
     what: 'A broker is a single Kafka server. It stores partitions on its disk, accepts writes from producers and serves reads to consumers.',
-    fits: 'Records live in partitions; partitions live on brokers. Next (coming soon): many brokers working together as a cluster.',
+    fits: 'Records live in partitions; partitions live on brokers. Next: many brokers working together as a cluster.',
   },
   watch: {
     build(s) {
@@ -139,7 +139,7 @@ export default {
       },
       {
         title: 'So Kafka runs many brokers',
-        text: 'A real deployment runs several brokers, called a cluster. Partitions are spread across them to share the load. To survive a broker failure, partitions are also copied to other brokers (replication). Both are coming lessons.',
+        text: 'A real deployment runs several brokers, called a cluster. Partitions are spread across them to share the load. To survive a broker failure, partitions are also copied to other brokers (replication). Both are the next two lessons.',
         observe: 'Three brokers, each holding one of the partitions.',
         focus: v => v.cluster,
         async run(s, v) {
@@ -255,5 +255,5 @@ export default {
     answer: 0,
     why: 'Without a copy elsewhere, the only replica of orders-1 is offline. Its data is safe on disk, but it cannot be read or written until the broker comes back. Replication (a later lesson) fixes this.',
   },
-  related: ['partition', 'offset'],
+  related: ['cluster', 'replica'],
 };

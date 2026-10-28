@@ -91,7 +91,7 @@ function placeGuide({ keep = false } = {}) {
     c.classList.remove('v-nonext', 'v-nowatch', 'v-title');
     c.classList.add(...variant);
     const titleOnly = variant.includes('v-title');
-    const widths = titleOnly ? [null] : [...new Set([320, 400, 520, 660].map(x => Math.round(Math.min(x, W - 2 * m))))];
+    const widths = titleOnly ? [null] : [...new Set([280, 320, 400, 520, 660].map(x => Math.round(Math.min(x, W - 2 * m))))];
     let free = null, any = null, stayed = null;
     for (const width of widths) {
       c.style.width = width ? `${width}px` : '';
@@ -411,7 +411,7 @@ function buildTry() {
   stage.clock.paused = false;
   tryState.token = {};
   tryState.v = t.build(stage, tryState.input);
-  for (const b of $('try-controls').querySelectorAll('[data-action]')) b.disabled = false;
+  for (const b of $('try-controls').querySelectorAll('[data-action]')) { b.disabled = false; delete b.dataset.used; }
   $('try-readout').innerHTML = t.readout(tryState.v);
 }
 async function runAction(c, button) {
@@ -426,8 +426,9 @@ async function runAction(c, button) {
   finally {
     if (tryState?.token === token) {
       tryState.busy = false;
-      buttons.forEach(b => b.disabled = false);
-      if (c.once) button.disabled = true;
+      // One-time actions (e.g. "+ Add Broker 4") stay disabled after use, even when other actions finish later.
+      if (c.once) button.dataset.used = '1';
+      buttons.forEach(b => b.disabled = b.dataset.used === '1');
       $('try-readout').innerHTML = t.readout(v);
     }
   }

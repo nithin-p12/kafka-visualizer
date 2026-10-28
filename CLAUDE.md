@@ -46,7 +46,9 @@ The server runs on **http://127.0.0.1:8888** (`application.yaml`). `StartupUrls.
 - `learn/player.js`: step player (seek replays earlier steps instantly; hooks `step`, `started`, `settled`, `hold`, `done`).
 - `learn/scene.js`: SVG helpers and the pausable clock.
 - `learn/lessons/<id>.js`: one lesson each: `watch`/`deeper` tracks (`build`, `steps[{title,text,observe,focus,run}]`), `tryIt`, `takeaway`, `recap {points, interview[{q,a}]}`, `quiz`. `lessons/index.js` holds the curriculum (`LESSONS`, `LEVELS`).
-- Status: Record and Topic are redrawn at the new sizes and have interview Q&A; Partition, Offset and Broker still use the older, smaller scenes and have no interview Q&A yet.
+- `learn/lessons/kit.js`: shared helpers for multi-broker scenes (broker boxes, partition lanes with leader/follower roles, record flights, catch-up).
+- Status: built lessons are Record, Topic, Partition, Offset, Broker, Cluster, Replica. Record, Topic, Cluster and Replica use the new sizes and have interview Q&A; Partition, Offset and Broker still use the older, smaller scenes and have no interview Q&A yet. Next Atoms to build: Producer, Consumer, Consumer group, Commit & lag, Retention.
+- Adding a lesson: create `lessons/<id>.js`, import it in `lessons/index.js` (add to `LESSONS`, and use the id string in `LEVELS`), add the id to `LESSONS` in `src/test/browser/learn.cjs`, and point the previous lesson's "Next" text at it.
 
 ## Tests (when asked)
 

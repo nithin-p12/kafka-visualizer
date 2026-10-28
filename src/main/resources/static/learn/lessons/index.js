@@ -4,16 +4,16 @@ import topic from './topic.js';
 import partition from './partition.js';
 import offset from './offset.js';
 import broker from './broker.js';
+import cluster from './cluster.js';
+import replica from './replica.js';
 
-export const LESSONS = [record, topic, partition, offset, broker];
+export const LESSONS = [record, topic, partition, offset, broker, cluster, replica];
 
 export const LEVELS = [
   {
     id: 'atoms', title: 'Level 1 · Atoms', blurb: 'One component at a time. What it is and what it does inside.',
     items: [
-      'record', 'topic', 'partition', 'offset', 'broker',
-      { id: 'cluster', title: 'Cluster', tagline: 'Many brokers working as one' },
-      { id: 'replica', title: 'Replica, leader & follower', tagline: 'Copies of a partition across brokers' },
+      'record', 'topic', 'partition', 'offset', 'broker', 'cluster', 'replica',
       { id: 'producer', title: 'Producer', tagline: 'How records leave your app' },
       { id: 'consumer', title: 'Consumer', tagline: 'The poll loop that reads records' },
       { id: 'group', title: 'Consumer group', tagline: 'Sharing partitions between instances' },
