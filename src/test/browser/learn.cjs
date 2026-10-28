@@ -2,7 +2,7 @@ const { chromium } = require(require('node:path').resolve('target/browser-tests/
 const assert = require('node:assert/strict'), fs = require('node:fs');
 const base = process.env.KAFKA_LAB_URL || 'http://127.0.0.1:8888', out = 'target/browser-tests/learn';
 fs.mkdirSync(out, { recursive: true });
-const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker', 'cluster', 'replica'];
+const LESSONS = ['record', 'topic', 'partition', 'offset', 'broker', 'cluster', 'replica', 'producer', 'consumer', 'group', 'commit-lag', 'retention'];
 (async () => {
   const browser = await chromium.launch({ channel: 'msedge', headless: true });
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } }), errors = [];

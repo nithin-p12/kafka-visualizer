@@ -27,7 +27,7 @@ export default {
   id: 'replica', n: 7, title: 'Replica, leader & follower', tagline: 'Copies of a partition across brokers',
   guide: {
     what: 'A replica is a copy of a partition stored on another broker. One copy, the leader, takes all writes; the others, followers, copy from it, ready to take over if the leader\'s broker fails.',
-    fits: 'In the cluster lesson a stopped broker took its partition offline. Replicas fix that. Next (coming soon): the producer, and how it sends records to leaders.',
+    fits: 'In the cluster lesson a stopped broker took its partition offline. Replicas fix that. Next: the producer, and how it sends records to leaders.',
   },
   watch: {
     build: scene,

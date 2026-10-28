@@ -6,19 +6,19 @@ import offset from './offset.js';
 import broker from './broker.js';
 import cluster from './cluster.js';
 import replica from './replica.js';
+import producer from './producer.js';
+import consumer from './consumer.js';
+import group from './group.js';
+import commitLag from './commit-lag.js';
+import retention from './retention.js';
 
-export const LESSONS = [record, topic, partition, offset, broker, cluster, replica];
+export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention];
 
 export const LEVELS = [
   {
     id: 'atoms', title: 'Level 1 · Atoms', blurb: 'One component at a time. What it is and what it does inside.',
     items: [
-      'record', 'topic', 'partition', 'offset', 'broker', 'cluster', 'replica',
-      { id: 'producer', title: 'Producer', tagline: 'How records leave your app' },
-      { id: 'consumer', title: 'Consumer', tagline: 'The poll loop that reads records' },
-      { id: 'group', title: 'Consumer group', tagline: 'Sharing partitions between instances' },
-      { id: 'commit-lag', title: 'Commit & lag', tagline: 'Bookmarks and how far behind you are' },
-      { id: 'retention', title: 'Retention', tagline: 'When old records disappear' },
+      'record', 'topic', 'partition', 'offset', 'broker', 'cluster', 'replica', 'producer', 'consumer', 'group', 'commit-lag', 'retention',
     ],
   },
   {
