@@ -13,7 +13,7 @@ cd kafka-visualizer
 .\mvnw.cmd spring-boot:run
 ```
 
-Open **http://localhost:8080** for the home page, which links to **Learn** (`/learn.html`) and the **Visualizer** (`/visualizer.html`). The startup log prints all three URLs. Stop the application with **Ctrl+C**.
+Open **http://localhost:8888** for the home page, which links to **Learn** (`/learn.html`) and the **Visualizer** (`/visualizer.html`). The startup log prints all three URLs. Stop the application with **Ctrl+C**.
 
 Alternatively, after building:
 
@@ -21,13 +21,13 @@ Alternatively, after building:
 java -jar .\target\kafka-visualizer-0.0.1-SNAPSHOT.jar
 ```
 
-Requires JDK 17 (`java -version`; `JAVA_HOME` points at the JDK). The Maven wrapper downloads Maven/dependencies on first use. The application binds to localhost on port 8080; stop any other application using that port before starting. No internet connection is needed at runtime.
+Requires JDK 17 (`java -version`; `JAVA_HOME` points at the JDK). The Maven wrapper downloads Maven/dependencies on first use. The application binds to localhost on port 8888; stop any other application using that port before starting. No internet connection is needed at runtime.
 
 In IntelliJ IDEA, import/reload the Maven project and run `com.kafka.visualizer.KafkaVisualizerApplication`. The Maven project and Spring application are named `kafka-visualizer`.
 
 ## Learn Kafka (animated lessons)
 
-Open **http://localhost:8080/learn.html** (or the **Learn** card on the home page, or **📘 Learn** in the Visualizer toolbar). The learning map links to the Visualizer from its top bar; inside a lesson, the **Kafka** logo returns to the map. The learning map orders lessons from single components to end-to-end flow:
+Open **http://localhost:8888/learn.html** (or the **Learn** card on the home page, or **📘 Learn** in the Visualizer toolbar). The learning map links to the Visualizer from its top bar; inside a lesson, the **Kafka** logo returns to the map. The learning map orders lessons from single components to end-to-end flow:
 
 1. **Atoms**: one component at a time. Built so far: Record, Topic, Partition, Offset, Broker. Cluster, replicas, producer, consumer, groups, commit/lag and retention appear as "coming soon".
 2. **Links**: how two components interact (key routing, acks, replication, election, assignment, rebalance, redelivery, multiple groups).

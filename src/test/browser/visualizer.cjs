@@ -5,7 +5,7 @@ const { chromium } = require(
 const assert = require("node:assert/strict"),
   fs = require("node:fs");
 const out = "target/browser-tests/screenshots",
-  base = process.env.KAFKA_LAB_URL || "http://localhost:8080";
+  base = process.env.KAFKA_LAB_URL || "http://127.0.0.1:8888";
 fs.mkdirSync(out, { recursive: true });
 (async () => {
   const browser = await chromium.launch({ channel: "msedge", headless: true });

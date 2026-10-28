@@ -2,7 +2,7 @@
 const { chromium } = require(require('node:path').resolve('target/browser-tests/node_modules/playwright'));
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
-const base = process.env.KAFKA_LAB_URL || 'http://localhost:8080';
+const base = process.env.KAFKA_LAB_URL || 'http://127.0.0.1:8888';
 const out = 'target/browser-tests/audit';
 fs.mkdirSync(out, { recursive: true });
 const report = { started: new Date().toISOString(), browser: 'Microsoft Edge', results: [], errors: [] };

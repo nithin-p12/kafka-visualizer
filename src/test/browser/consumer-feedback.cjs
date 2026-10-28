@@ -1,7 +1,7 @@
 /* Real Edge checks for assignment color transfer, in-place completion and consumer lag alerts. */
 const { chromium } = require(require('node:path').resolve('target/browser-tests/node_modules/playwright'));
 const assert = require('node:assert/strict'), fs = require('node:fs');
-const base = process.env.KAFKA_LAB_URL || 'http://localhost:8080';
+const base = process.env.KAFKA_LAB_URL || 'http://127.0.0.1:8888';
 const out = 'target/browser-tests/consumer-feedback';
 fs.mkdirSync(out, {recursive: true});
 (async () => {

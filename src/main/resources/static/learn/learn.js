@@ -266,7 +266,7 @@ function renderPath() {
   const steps = [
     { go: 'watch', n: icon('watch'), title: 'Watch', sub: 'The animated walkthrough' },
     { go: 'try', n: icon('try'), title: 'Try it', sub: 'Same scene, you press the buttons' },
-    { go: 'deeper', n: icon('deeper'), title: 'Go deeper', sub: `Optional · ${current.deeper.note}` },
+    { go: 'deeper', n: icon('deeper'), title: 'Go deeper', sub: current.deeper.note },
     { go: 'next', n: next ? next.n : '✓', title: next ? `Next: ${next.title}` : 'Back to the map', sub: next ? next.tagline : 'More lessons are coming' },
   ];
   $('path').innerHTML = steps.map(st => {

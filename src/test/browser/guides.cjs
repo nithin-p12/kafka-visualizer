@@ -1,6 +1,6 @@
 const { chromium } = require(require('node:path').resolve('target/browser-tests/node_modules/playwright'));
 const assert = require('node:assert/strict'), fs=require('node:fs');
-const base=process.env.KAFKA_LAB_URL || 'http://localhost:8080',out='target/browser-tests/guides';
+const base=process.env.KAFKA_LAB_URL || 'http://127.0.0.1:8888',out='target/browser-tests/guides';
 fs.mkdirSync(out,{recursive:true});
 (async()=>{
  const browser=await chromium.launch({channel:'msedge',headless:true});
