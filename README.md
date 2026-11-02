@@ -4,7 +4,7 @@ Interactive Apache Kafka architecture and message-flow **simulation** for Senior
 
 ## Run on Windows 11
 
-**Quickest:** double-click **`Start Kafka Lab.vbs`** in the project folder. It starts the app in the background (no console or IDE window), waits until it is up, and opens the home page in Chrome. If the app is already running, it just opens the page. Double-click **`Stop Kafka Lab.vbs`** to stop it. The log goes to `target\kafka-lab.log`. For one-click access, right-click `Start Kafka Lab.vbs` → *Show more options* → *Send to* → *Desktop (create shortcut)*.
+**Quickest:** double-click **`Start Kafka Lab.vbs`** in the project folder. It starts the app in the background (no console or IDE window), waits until it is up, and opens the home page in Chrome. While it runs, a **PN icon sits in the system tray** (look under the ^ arrow if it is hidden). Hover over it to see whether the app is starting or running; double-click it to open a new tab; right-click it for Open Kafka Lab / Learn / Visualizer, Show log and **Quit** (stops the app). Double-clicking the launcher again just opens a tab. `Stop Kafka Lab.vbs` also stops the app. The log goes to `target\kafka-lab.log`. For one-click access, right-click `Start Kafka Lab.vbs` → *Show more options* → *Send to* → *Desktop (create shortcut)*.
 
 Or from PowerShell:
 
