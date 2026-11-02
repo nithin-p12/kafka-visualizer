@@ -22,8 +22,9 @@ import multiGroup from './multi-group.js';
 import journey from './journey.js';
 import isr from './isr.js';
 import batching from './batching.js';
+import idempotence from './idempotence.js';
 
-export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, election, assignment, rebalance, redelivery, multiGroup, journey, isr, batching];
+export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, election, assignment, rebalance, redelivery, multiGroup, journey, isr, batching, idempotence];
 
 export const LEVELS = [
   {
@@ -54,7 +55,7 @@ export const LEVELS = [
     items: [
       'isr',
       'batching',
-      { id: 'idempotence', title: 'Idempotent producer & exactly-once', tagline: 'No duplicates on retry' },
+      'idempotence',
       { id: 'kraft', title: 'KRaft controller', tagline: 'Who manages cluster metadata' },
     ],
   },
