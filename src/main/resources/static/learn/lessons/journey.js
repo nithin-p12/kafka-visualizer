@@ -62,7 +62,7 @@ function scene(s, { acks = 'all' } = {}) {
   // ---- followers ----
   for (const f of FOL) {
     const b = frame(s, v, f.key, f.x, FY, 224, 110, `Broker ${f.name}`);
-    s.text(b, 98, -37, 'follower', { 'text-anchor': 'end', 'font-size': 15, fill: MUTED });
+    b.roleT = s.text(b, 98, -37, 'follower', { 'text-anchor': 'end', 'font-size': 15, fill: MUTED });
     s.text(b, -98, 0, '.log', { 'text-anchor': 'start', 'font-size': 15, 'font-family': MONO, 'font-weight': 700 });
     b.blocks = [s.block(fSlot(99), 0, '99', P0, { ...SBLK, parent: b })];
     b.hole = s.box(fSlot(100), 0, SBLK.w, SBLK.h, '', { parent: b, dash: '4 3', stroke: P0, rx: 3 });
@@ -84,6 +84,7 @@ function scene(s, { acks = 'all' } = {}) {
   frame(s, v, 'coord', CX, FY, 220, 110, 'Group coordinator');
   s.text(v.n.coord, 0, -6, '__consumer_offsets', { 'font-size': 15, 'font-family': MONO, 'font-weight': 700 });
   v.committedT = s.text(v.n.coord, 0, 24, 'orders-0 → 100', { 'font-size': 15, 'font-family': MONO, fill: MUTED, 'font-weight': 700 });
+  v.coordNote = s.text(v.n.coord, 0, 44, '', { 'font-size': 13, fill: MUTED });
 
   // ---- wires (requests and responses travel on separate curves) ----
   const vline = (x, y1, y2) => `M${x},${y1} L${x},${y2}`;
@@ -111,6 +112,9 @@ function scene(s, { acks = 'all' } = {}) {
   wire(v, 'deser-listen', vline(CX, 162, 178));
   wire(v, 'cons-coord', vline(CX - 16, 258, FY - 55));
   wire(v, 'coord-cons', vline(CX + 16, FY - 55, 258));
+  // used by the leader-crash flow: the consumer fetching from B2 once it leads
+  wire(v, 'cons-b2', 'M746,104 C714,104 716,410 600,410 L470,410 C463,410 461,402 460,394');
+  wire(v, 'b2-cons', 'M460,384 C466,384 470,402 478,402 L596,402 C706,402 704,112 746,112');
 
   layers(s, v);
   return v;
@@ -508,8 +512,8 @@ const noReply = {
   async run(s, v) { await swap(s, v.handT, 'acks=0 → no reply', RED); await s.shake(v.n.hand); },
 };
 
-const flowOf = (acks, steps) => {
-  const track = { continuous: true, phases: true, build: s => { const v = scene(s, { acks }); v.track = track; return v; }, enter, steps };
+const flowOf = (acks, steps, pre) => {
+  const track = { continuous: true, phases: true, async build(s) { const v = scene(s, { acks }); v.track = track; if (pre) await pre(s, v); return v; }, enter, steps };
   return track;
 };
 const prelude = [E.send, E.metaCheck, E.metaReq, E.metaRes, E.serialize, E.partition, E.accumulate, E.drain];
@@ -519,6 +523,149 @@ const consume = [E.poll, E.lookup, E.read, E.fetchBack, E.deserialize, E.process
 const flowAll = flowOf('all', [...prelude, ...write('all'), E.park, ...replicate, E.hw, E.release, E.produceRes, E.future, ...consume]);
 const flowOne = flowOf('1', [...prelude, ...write('1'), ack1, E.future, risk1, ...replicate, hw1]);
 const flowZero = flowOf('0', [...prelude, E.produceReq('0'), sent0, ...write('0').slice(1), noReply, ...replicate, E.hw]);
+
+// ---- crash flows: they start from the happy path, played up to a point ----
+const upTo = step => async (s, v) => { for (const st of flowAll.steps.slice(0, flowAll.steps.indexOf(step) + 1)) await st.run(s, v); };
+const LC = {
+  safe: {
+    phase: 'Before the crash', on: ['b1', 'b2', 'b3', 'isr', 'app'],
+    title: 'Offset 100 is committed and acknowledged',
+    text: 'This picks up the acks=all flow after the producer got SendResult: offset 100 is on B1, B2 and B3 and the HW is 101. The consumer has not read it yet.',
+    observe: 'Record 100 on all three brokers; send() shows ✓ SendResult.',
+    async run(s, v) { hit(v, 'isr'); await s.wait(400); },
+  },
+  crash: {
+    phase: 'Leader crash', on: ['b1'],
+    title: 'B1, the leader, crashes',
+    text: 'The machine running B1 dies. orders-0 has no working leader. Its .log, with offset 100, is unreachable.',
+    observe: 'B1 turns red.',
+    async run(s, v) {
+      v.n.b1.rect.setAttribute('stroke', RED); v.n.b1.rect.setAttribute('fill', '#fff4f4');
+      await swap(s, v.n.b1.right, '✕ down', RED);
+      await s.shake(v.n.b1);
+    },
+  },
+  elect: {
+    phase: 'Leader crash', on: ['b2', 'b3', 'isr'],
+    title: 'The controller makes B2 the leader',
+    text: 'After broker.session.timeout.ms without heartbeats (9 s), the controller fences B1 and picks the first live replica in the ISR, B2, as leader in a new leader epoch. B3 now follows B2. (Leader election shows each step.)',
+    observe: 'B2 shows ★ leader; ISR {B2, B3}.',
+    async run(s, v) {
+      const [b2, b3] = v.fol;
+      await Promise.all([swap(s, b2.roleT, '★ leader', AMBER), swap(s, b3.roleT, 'follows B2', MUTED)]);
+      b2.rect.setAttribute('stroke-width', 2.6);
+      await swap(s, v.isrT, 'ISR {B2, B3} · leader B2 · epoch 6', AMBER);
+    },
+  },
+  fail: {
+    phase: 'Clients move', on: ['poll', 'b1'], wire: 'cons-hand',
+    title: 'The consumer\'s fetch to B1 fails',
+    text: 'The consumer polls orders-0 from 100 and sends it to B1, the leader it knew. The connection fails; the consumer refreshes its metadata and learns that B2 now leads P0. (The producer does the same on its next send.)',
+    observe: 'A red Fetch bounces off B1.',
+    async run(s, v) { await packet(s, v, 'cons-hand', 'Fetch(P0, 100)', RED, { ms: 900 }); await s.shake(v.n.poll); await swap(s, v.n.poll.t, 'poll() · P0 → B2', AMBER); },
+  },
+  fetchB2: {
+    phase: 'Clients move', on: ['poll', 'b2'], wire: 'cons-b2',
+    title: 'Fetch(P0, 100) from the new leader',
+    text: 'The consumer sends the same fetch to B2. Its position is still 100: the leader changed, the group\'s place in the log did not.',
+    observe: 'A FetchRequest travels from the consumer to B2.',
+    async run(s, v) { await packet(s, v, 'cons-b2', 'Fetch(P0, 100)', BLUE, { ms: 1100 }); hit(v, 'b2'); },
+  },
+  serve: {
+    phase: 'Clients move', on: ['b2', 'poll'], wire: 'b2-cons',
+    title: 'B2 has offset 100: nothing was lost',
+    text: 'B2 copied offset 100 before the producer was acknowledged; that is what acks=all waited for. It serves the record from its own log, exactly as B1 would have.',
+    observe: 'Record 100 travels from B2 to the consumer.',
+    async run(s, v) {
+      await s.pulse(v.fol[0].blocks.at(-1));
+      v.out = s.block(460, 389, '100', P0, { ...BLK, parent: v.packs });
+      await packet(s, v, 'b2-cons', 'records', GREEN, { ms: 1100 });
+      await s.move(v.out, CX + 112, 90, 500);
+      hit(v, 'poll');
+    },
+  },
+  lesson: {
+    phase: 'After', on: ['b2', 'isr', 'coord'],
+    title: 'acks=all + an ISR replica = no loss',
+    text: 'The acknowledged record survived the leader. With acks=1 the producer could have been told "success" before B2 had it, and the crash would have lost it. When B1 returns, it rejoins as a follower of B2.',
+    observe: 'Record 100 processed and committed via B2.',
+    async run(s, v) { hit(v, 'isr'); await s.wait(400); },
+  },
+};
+const CC = {
+  done: {
+    phase: 'Before the crash', on: ['listen', 'coord'],
+    title: 'Order 100 is processed, not yet committed',
+    text: 'This picks up the acks=all flow just after the listener processed order 100. The consumer\'s position is 101 in memory, but __consumer_offsets still says 100.',
+    observe: '"✓ order processed"; the coordinator still shows orders-0 → 100.',
+    async run(s, v) { hit(v, 'coord'); await s.wait(400); },
+  },
+  crash: {
+    phase: 'Consumer crash', on: ['cons'],
+    title: 'The consumer crashes before committing',
+    text: 'The consumer process dies right after processing, before OffsetCommit(101) could be sent. Its in-memory position is gone.',
+    observe: 'The consumer turns red.',
+    async run(s, v) {
+      v.n.cons.rect.setAttribute('stroke', RED); v.n.cons.rect.setAttribute('fill', '#fff4f4');
+      await Promise.all([swap(s, v.posT, 'position: lost', RED), swap(s, v.n.listen.t, 'listener: process order', MUTED)]);
+      await s.shake(v.n.cons);
+    },
+  },
+  timeout: {
+    phase: 'Consumer crash', on: ['coord'],
+    title: 'The coordinator waits for the session to time out',
+    text: 'No LeaveGroup was sent, so the group coordinator only notices missing heartbeats. After session.timeout.ms (45 s) it removes the member and rebalances P0 to whoever is left or joins next.',
+    observe: 'The coordinator: "no heartbeat · 45 s → rebalance".',
+    async run(s, v) { for (const t of ['15 s', '30 s', '45 s → rebalance']) { await swap(s, v.coordNote, `no heartbeat · ${t}`, t.length > 5 ? RED : AMBER); await s.wait(200); } },
+  },
+  back: {
+    phase: 'Restart', on: ['cons', 'coord', 'pos'], wires: ['cons-coord', 'coord-cons'],
+    title: 'A consumer gets P0 and asks where to start',
+    text: 'The restarted instance joins orders-app, is assigned P0 and fetches the group\'s committed offset: 100. That is the only position that survived.',
+    observe: 'OffsetFetch → "committed 100"; position: 100.',
+    async run(s, v) {
+      v.n.cons.rect.setAttribute('stroke', '#bfe4df'); v.n.cons.rect.setAttribute('fill', '#f7fcfb');
+      await packet(s, v, 'cons-coord', 'OffsetFetch', BLUE, { ms: 700 });
+      await packet(s, v, 'coord-cons', 'committed 100', GREEN, { ms: 700 });
+      await Promise.all([swap(s, v.posT, 'position: 100', BLUE), swap(s, v.coordNote, 'member rejoined', MUTED)]);
+    },
+  },
+  again: {
+    phase: 'Restart', on: ['poll', 'hand', 'log'], wires: ['cons-hand', 'hand-cons'],
+    title: 'Offset 100 is delivered again',
+    text: 'The consumer fetches from 100 and B1 returns record 100, the same one it processed before the crash.',
+    observe: 'Fetch(100) to B1, record 100 back to poll().',
+    async run(s, v) {
+      await packet(s, v, 'cons-hand', 'Fetch(P0, 100)', BLUE, { ms: 900 });
+      v.out = s.block(logX(100), LOG_Y, '100', P0, { ...BLK, parent: v.packs });
+      await along(s, v, v.out, 'log-hand', 600);
+      await Promise.all([packet(s, v, 'hand-cons', 'records', GREEN, { ms: 1000 }), ride(s, v, v.out, 'hand-cons', 1000, 300)]);
+      hit(v, 'poll');
+    },
+  },
+  twice: {
+    phase: 'Restart', on: ['listen', 'deser'], wire: 'deser-listen',
+    title: 'Order 100 is processed a second time',
+    text: 'The listener runs again for order 100. Unless processing is idempotent (a unique order id, an upsert), the customer is charged twice. This is at-least-once delivery.',
+    observe: 'The listener shows "✕ processed AGAIN".',
+    async run(s, v) {
+      await s.move(v.out, CX, 144 + 26, 400);
+      await s.move(v.out, CX, 198 + 30, 400);
+      await s.fade(v.out, 0, 200); v.out.remove();
+      await swap(s, v.n.listen.t, '✕ processed AGAIN', RED);
+      await swap(s, v.posT, 'position: 101', BLUE);
+    },
+  },
+  lesson: {
+    phase: 'After', on: ['coord', 'listen'], wires: ['cons-coord', 'coord-cons'],
+    title: 'Then it commits 101 as usual',
+    text: 'This time the commit goes through and the group moves on. Kafka delivered offset 100 twice; avoiding a double effect is the application\'s job (see Commit & restart).',
+    observe: 'OffsetCommit(101); the coordinator shows orders-0 → 101.',
+    async run(s, v) { await E.commit.run(s, v); await E.committed.run(s, v); },
+  },
+};
+const flowLeaderCrash = flowOf('all', [LC.safe, LC.crash, LC.elect, LC.fail, LC.fetchB2, LC.serve, E.deserialize, E.process, E.position, E.commit, E.committed, LC.lesson], upTo(E.future));
+const flowConsumerCrash = flowOf('all', [CC.done, CC.crash, CC.timeout, CC.back, CC.again, CC.twice, CC.lesson], upTo(E.process));
 
 // ---- try it: preset to the moment the sender holds the batch, then run the broker side with any acks ----
 const ACK_FLOWS = { all: flowAll, 1: flowOne, 0: flowZero };
@@ -543,14 +690,14 @@ export default {
   docked: true,
   guide: {
     what: 'One record, ORD101, followed event by event: metadata, serializing and partitioning, the leader\'s .log and index files, followers fetching, the high watermark, the acknowledgement, and finally a consumer reading and committing it.',
-    fits: 'Every atom working together, on one map. Compare the acks flows; crash flows come next. Turn on 🔁 Loop to watch the whole route again and again.',
+    fits: 'Every atom working together, on one map. Compare the acks flows and the two crash flows. Turn on 🔁 Loop to watch the whole route again and again.',
   },
   flows: [
     { id: 'all', short: 'acks=all', label: 'Happy path · acks=all', about: 'The producer waits until every in-sync replica has the record.', track: flowAll },
     { id: 'one', short: 'acks=1', label: 'acks=1', about: 'The leader replies after its own write; followers copy later.', track: flowOne },
     { id: 'zero', short: 'acks=0', label: 'acks=0', about: 'Fire and forget: no reply at all.', track: flowZero },
-    { id: 'crash', label: 'Leader crash', about: 'Coming soon', soon: true },
-    { id: 'consumer-crash', label: 'Consumer crash', about: 'Coming soon', soon: true },
+    { id: 'crash', short: 'leader crash', label: 'Leader crash', about: 'B1 dies after the ack; B2 serves offset 100.', track: flowLeaderCrash },
+    { id: 'consumer-crash', short: 'consumer crash', label: 'Consumer crash', about: 'Processed but not committed: offset 100 comes back.', track: flowConsumerCrash },
   ],
   watch: flowAll,
   tryIt: {
