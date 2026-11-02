@@ -17,9 +17,11 @@ import replication from './replication.js';
 import election from './election.js';
 import assignment from './assignment.js';
 import rebalance from './rebalance.js';
+import redelivery from './redelivery.js';
+import multiGroup from './multi-group.js';
 import journey from './journey.js';
 
-export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, election, assignment, rebalance, journey];
+export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, election, assignment, rebalance, redelivery, multiGroup, journey];
 
 export const LEVELS = [
   {
@@ -37,8 +39,8 @@ export const LEVELS = [
       'election',
       'assignment',
       'rebalance',
-      { id: 'redelivery', title: 'Commit & restart', tagline: 'At-least-once in action' },
-      { id: 'multi-group', title: 'Multiple groups', tagline: 'Every group gets every record' },
+      'redelivery',
+      'multi-group',
     ],
   },
   {
