@@ -14,9 +14,10 @@ import retention from './retention.js';
 import keyRouting from './key-routing.js';
 import acks from './acks.js';
 import replication from './replication.js';
+import election from './election.js';
 import journey from './journey.js';
 
-export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, journey];
+export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, election, journey];
 
 export const LEVELS = [
   {
@@ -31,7 +32,7 @@ export const LEVELS = [
       'key-routing',
       'acks',
       'replication',
-      { id: 'election', title: 'Leader election', tagline: 'Broker failure → new leader' },
+      'election',
       { id: 'assignment', title: 'Partition assignment', tagline: 'Partitions → group members' },
       { id: 'rebalance', title: 'Rebalance', tagline: 'A consumer joins or leaves' },
       { id: 'redelivery', title: 'Commit & restart', tagline: 'At-least-once in action' },
