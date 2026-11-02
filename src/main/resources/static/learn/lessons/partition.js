@@ -1,30 +1,31 @@
 // Lesson 3: the partition, an ordered append-only log inside a topic.
 import { el, PARTITION_COLORS as PC, partitionFor } from '../scene.js';
 
-const GREY = '#9aa3a9', CX = 570, SLOT0 = 362, SLOT = 38, MAX = 12;
+const GREY = '#9aa3a9', CX = 570, SLOT0 = 368, SLOT = 48, MAX = 10, MONO = 'Consolas, monospace';
+const BLK = { w: 42, h: 32, size: 14 };
 const short = key => key.replace('user-', '');
 
 function topic(s, n, { hidden = false } = {}) {
   const v = { lanes: [], logs: [], n };
-  v.producer = s.box(90, 230, 150, 64, 'Producer', { sub: 'OrderService' });
-  v.frame = s.box(560, 235, 590, 340, '', { stroke: '#1677ff', dash: '6 5' });
-  s.text(v.frame, -280, -152, 'topic: orders', { 'text-anchor': 'start', 'font-size': 13, 'font-weight': 650, fill: '#1677ff' });
-  const gap = n === 3 ? 90 : 72, top = 240 - gap * (n - 1) / 2;
+  v.producer = s.box(100, 236, 170, 76, 'Producer', { sub: 'OrderService', size: 17, subSize: 14 });
+  v.frame = s.box(570, 240, 600, 370, '', { stroke: '#1677ff', dash: '6 5', rx: 12 });
+  s.text(v.frame, -282, -163, 'topic: orders', { 'text-anchor': 'start', 'font-size': 16, 'font-weight': 700, fill: '#1677ff' });
+  const gap = n === 3 ? 96 : 76, top = 252 - gap * (n - 1) / 2;
   for (let i = 0; i < n; i++) {
-    const lane = s.box(CX, top + i * gap, 520, 52, '', { stroke: PC[i] });
-    s.text(lane, -244, 0, `P${i}`, { 'font-weight': 700, fill: PC[i] });
+    const lane = s.box(CX, top + i * gap, 540, n === 3 ? 62 : 56, '', { stroke: PC[i], rx: 8 });
+    s.text(lane, -246, 0, `P${i}`, { 'font-size': 18, 'font-weight': 800, fill: PC[i] });
     v.lanes.push(lane); v.logs.push([]);
     if (hidden) lane.setAttribute('opacity', 0);
   }
   if (hidden) v.frame.setAttribute('opacity', 0);
-  v.formula = s.text(s.root, 560, 34, '', { 'font-size': 14, 'font-family': 'Consolas, monospace', fill: '#614373' });
+  v.formula = s.text(s.root, 570, 30, '', { 'font-size': 16, 'font-family': MONO, 'font-weight': 700, fill: '#614373' });
   return v;
 }
 const slotOf = (v, p, i) => [SLOT0 + i * SLOT, v.lanes[p]._y];
 async function append(s, v, p, label, { via } = {}) {
   const log = v.logs[p];
   if (log.length >= MAX) return null;
-  const b = s.block(v.producer._x + 70, v.producer._y, label, GREY);
+  const b = s.block(v.producer._x + 80, v.producer._y, label, GREY, BLK);
   if (via) await s.move(b, ...via, 520);
   await s.move(b, ...slotOf(v, p, log.length), 620);
   b.rect.setAttribute('fill', PC[p]);
@@ -58,7 +59,7 @@ export default {
       {
         title: 'Each partition is an append-only log',
         text: 'A new record is always added to the end of the partition. Existing records never move. For now, all records go to P0.',
-        observe: 'Each new block lands right after the previous one. Its color changes to P0\'s green on arrival.',
+        observe: 'Each new block lands right after the previous one. Its colour changes to P0\'s green on arrival.',
         focus: v => [v.lanes[0]],
         async run(s, v) { for (let i = 1; i <= 4; i++) await append(s, v, 0, `${i}`); },
       },
@@ -68,9 +69,9 @@ export default {
         observe: 'Record 5 tries to cut in, is pushed back, and goes to the end.',
         focus: v => [v.logs[0].at(-1)],
         async run(s, v) {
-          const b = s.block(160, 230, '5', GREY);
-          await s.move(b, SLOT0 + 1.5 * SLOT, v.lanes[0]._y - 30, 700);
-          b.rect.setAttribute('stroke', '#ce3434'); b.rect.setAttribute('stroke-width', 2);
+          const b = s.block(180, 236, '5', GREY, BLK);
+          await s.move(b, SLOT0 + 1.5 * SLOT, v.lanes[0]._y - 40, 700);
+          b.rect.setAttribute('stroke', '#ce3434'); b.rect.setAttribute('stroke-width', 2.5);
           await s.shake(b);
           b.rect.removeAttribute('stroke');
           await s.move(b, ...slotOf(v, 0, v.logs[0].length), 600);
@@ -80,7 +81,7 @@ export default {
       },
       {
         title: 'The key picks the partition',
-        text: 'With a key, the producer computes murmur2(key) % 3, which is Kafka\'s real default formula. The same key always gives the same number, so it always lands in the same partition.',
+        text: 'With a key, the producer computes murmur2(key) % 3, which is Kafka\'s real default formula. The same key always gives the same number, so it always lands in the same partition. (Key → partition goes into the details.)',
         observe: 'The formula at the top. Every "42" (user-42) goes to P1.',
         focus: v => [v.formula],
         async run(s, v) {
@@ -96,7 +97,7 @@ export default {
         async run(s, v) {
           const mine = v.logs[1].filter(b => b.key === 'user-42');
           await Promise.all(mine.map(async (b, i) => {
-            const t = s.text(s.root, b._x, b._y - 38, ['1st', '2nd', '3rd'][i], { 'font-size': 11, 'font-weight': 700, fill: '#614373' });
+            const t = s.text(s.root, b._x, b._y - 44, ['1st', '2nd', '3rd'][i], { 'font-size': 15, 'font-weight': 700, fill: '#614373' });
             await s.show(t, 300);
             await s.pulse(b);
           }));
@@ -109,7 +110,7 @@ export default {
         focus: v => v.order,
         async run(s, v) {
           await Promise.all(v.order.map((b, i) => {
-            const t = s.text(s.root, b._x, b._y + 36, `#${i + 1}`, { 'font-size': 11, 'font-weight': 700, fill: '#7b878f' });
+            const t = s.text(s.root, b._x, b._y + 42, `#${i + 1}`, { 'font-size': 15, 'font-weight': 700, fill: '#7b878f' });
             return s.show(t, 400);
           }));
         },
@@ -120,12 +121,12 @@ export default {
         observe: 'Three readers each consume their own partition, all at once.',
         focus: v => v.readers,
         async run(s, v) {
-          v.readers = v.lanes.map((l, i) => s.box(902, l._y, 86, 46, `Reader ${i + 1}`, { size: 12, stroke: PC[i] }));
+          v.readers = v.lanes.map((l, i) => s.box(904, l._y, 100, 56, `Reader ${i + 1}`, { size: 15, stroke: PC[i] }));
           await Promise.all(v.readers.map(r => s.pop(r)));
           await Promise.all(v.logs.map(async (log, p) => {
             for (const b of log.slice(0, 3)) {
-              const c = s.block(b._x, b._y, b.label.textContent, PC[p]);
-              await s.move(c, 856, b._y, 520);
+              const c = s.block(b._x, b._y, b.label.textContent, PC[p], BLK);
+              await s.move(c, 852, b._y, 520);
               c.remove();
               await s.pulse(v.readers[p]);
             }
@@ -167,12 +168,12 @@ export default {
     note: 'Partitions on disk, and why you should pick the count carefully.',
     build(s) {
       const v = {};
-      v.folder = s.box(250, 150, 380, 190, '', { stroke: PC[0] });
-      s.text(v.folder, -175, -76, '📁 /var/kafka-logs/orders-0/', { 'text-anchor': 'start', 'font-size': 13, 'font-weight': 650, 'font-family': 'Consolas, monospace' });
+      v.folder = s.box(290, 150, 520, 210, '', { stroke: PC[0], rx: 10 });
+      s.text(v.folder, -244, -82, '📁 /var/kafka-logs/orders-0/', { 'text-anchor': 'start', 'font-size': 16, 'font-weight': 700, 'font-family': MONO });
       v.files = [['00000000000000000000.log', 'the records'], ['00000000000000000000.index', 'offset → byte position'], ['00000000000000000000.timeindex', 'time → offset']].map(([f, d], i) => {
-        const r = s.g(-175, -36 + i * 40, v.folder);
-        s.text(r, 0, 0, f, { 'text-anchor': 'start', 'font-size': 11.5, 'font-family': 'Consolas, monospace' });
-        s.text(r, 350, 0, d, { 'text-anchor': 'end', 'font-size': 11, fill: '#7b878f' });
+        const r = s.g(-244, -36 + i * 46, v.folder);
+        s.text(r, 0, 0, f, { 'text-anchor': 'start', 'font-size': 15, 'font-family': MONO });
+        s.text(r, 488, 0, d, { 'text-anchor': 'end', 'font-size': 15, fill: '#65727a' });
         r.setAttribute('opacity', 0);
         return r;
       });
@@ -192,18 +193,18 @@ export default {
         observe: 'The active segment fills up, a new one starts, and the oldest segment is deleted.',
         focus: v => v.segs,
         async run(s, v) {
-          const seg = (x, label, fill) => { const g = s.box(x, 330, 150, 46, label, { size: 12, fill, stroke: PC[0] }); return g; };
-          v.segs = [seg(140, 'segment 0–999', '#eef7e8'), seg(310, 'segment 1000–1999', '#eef7e8')];
-          const active = seg(480, 'active · 2000…', '#fff');
+          const seg = (x, label, fill) => s.box(x, 342, 196, 56, label, { size: 15, fill, stroke: PC[0], rx: 8 });
+          v.segs = [seg(130, 'segment 0–999', '#eef7e8'), seg(340, 'segment 1000–1999', '#eef7e8')];
+          const active = seg(550, 'active · 2000…', '#fff');
           v.segs.push(active);
           await Promise.all(v.segs.map(g => s.show(g, 300)));
-          const fill = el('rect', { x: -75, y: -23, width: 0, height: 46, rx: 6, fill: '#5bb12f33' }, active);
-          await s.clock.tween(1200, t => fill.setAttribute('width', 150 * t));
-          const next = seg(650, 'active · 3000…', '#fff');
+          const fill = el('rect', { x: -98, y: -28, width: 0, height: 56, rx: 8, fill: '#5bb12f33' }, active);
+          await s.clock.tween(1200, t => fill.setAttribute('width', 196 * t));
+          const next = seg(760, 'active · 3000…', '#fff');
           active.label.textContent = 'segment 2000–2999';
           v.segs.push(next);
           await s.show(next, 300);
-          await s.fade(v.segs[0], .12, 700);
+          await s.fade(v.segs[0], .15, 700);
           v.segs[0].label.textContent = 'deleted by retention';
         },
       },
@@ -213,8 +214,8 @@ export default {
         observe: 'The same key gives a different partition when the count changes.',
         focus: v => [v.f3, v.f4],
         async run(s, v) {
-          v.f3 = s.text(s.root, 770, 140, `murmur2("user-42") % 3 = ${partitionFor('user-42', 3)}`, { 'font-size': 14, 'font-family': 'Consolas, monospace' });
-          v.f4 = s.text(s.root, 770, 190, `murmur2("user-42") % 4 = ${partitionFor('user-42', 4)}`, { 'font-size': 14, 'font-family': 'Consolas, monospace', fill: '#ce3434' });
+          v.f3 = s.text(s.root, 790, 110, `murmur2("user-42") % 3 = ${partitionFor('user-42', 3)}`, { 'font-size': 16, 'font-family': MONO, 'font-weight': 700 });
+          v.f4 = s.text(s.root, 790, 160, `murmur2("user-42") % 4 = ${partitionFor('user-42', 4)}`, { 'font-size': 16, 'font-family': MONO, 'font-weight': 700, fill: '#ce3434' });
           await s.show(v.f3, 400);
           await s.wait(400);
           await s.show(v.f4, 400);
@@ -224,11 +225,27 @@ export default {
     ],
   },
   takeaway: 'A partition is an ordered, append-only log. The key picks the partition (hash % count). Order is guaranteed only within a partition, and more partitions means more parallel readers.',
+  recap: {
+    points: [
+      'A topic is split into a fixed number of partitions, chosen at creation.',
+      'Each partition is an append-only log: records go to the end and never change.',
+      'The key decides the partition: same key, same partition.',
+      'Order is guaranteed within a partition, never across partitions.',
+      'Partitions are the unit of parallelism: one reader per partition per group.',
+      'On disk a partition is a folder of segment files; partitions can be added, never removed.',
+    ],
+    interview: [
+      { q: 'What is a partition and why does Kafka have them?', a: 'A partition is an **ordered, append-only log** that holds part of a topic\'s records. Partitions let a topic **scale**: they are spread over brokers, and consumers in a group read **different partitions in parallel**. They are also the unit of **ordering** and **replication**.' },
+      { q: 'Does Kafka guarantee message order?', a: '**Only within a partition.** Records with the **same key** go to the same partition, so they are read in the order they were written. Across partitions there is **no global order**. If you need total order, you need a single partition (and give up parallelism).' },
+      { q: 'How do you choose the number of partitions?', a: 'From the **throughput** you need per consumer and producer (partitions ≥ peak consumers in a group), plus **headroom**, because you can only **add** partitions later, and adding them **remaps keys**. Too many partitions cost broker memory, open files and slower recovery.' },
+      { q: 'Can you change a record in a partition?', a: '**No.** Partitions are append-only; records are immutable. To "update" you write a **new record** with the same key; log **compaction** can later keep only the latest value per key. Records are removed only by **retention** or compaction.' },
+    ],
+  },
   quiz: {
     q: 'Several records are sent with key "user-42". What does Kafka guarantee?',
     options: ['They are copied to every partition', 'They land in the same partition, in the order they were sent', 'They are ordered with all other records in the topic', 'They are spread evenly across partitions'],
     answer: 1,
     why: 'Same key, same hash, same partition. A partition keeps append order, so records for one key are always read in order. There is no order across partitions.',
   },
-  related: ['record', 'offset'],
+  related: ['record', 'offset', 'key-routing'],
 };

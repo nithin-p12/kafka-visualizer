@@ -7,11 +7,11 @@ const RED = '#ce3434', COMMIT = '#348747';
 // Compact lanes (inside small brokers) use narrower blocks so five records fit.
 function miniLane(s, parent, x, y, name, color, count, w, compact = false) {
   const g = s.g(x, y, parent);
-  Object.assign(g, { w, color, blocks: [], bw: compact ? 18 : 24 });
-  g.pos = compact ? i => -5 + i * 20 : i => -w / 2 + 112 + i * 28;
-  el('rect', { x: -w / 2, y: -17, width: w, height: 34, rx: 4, fill: '#fff', stroke: color }, g);
-  s.text(g, -w / 2 + 8, 0, name, { 'text-anchor': 'start', 'font-size': 11, 'font-weight': 700, 'font-family': 'Consolas, monospace', fill: color });
-  for (let i = 0; i < count; i++) g.blocks.push(s.block(g.pos(i), 0, `${i}`, color, { parent: g, w: g.bw, h: 20 }));
+  Object.assign(g, { w, color, blocks: [], bw: compact ? 21 : 30, bh: compact ? 24 : 28, bs: compact ? 12 : 13 });
+  g.pos = compact ? i => -6 + i * 23 : i => -w / 2 + 118 + i * 34;
+  el('rect', { x: -w / 2, y: -20, width: w, height: 40, rx: 5, fill: '#fff', stroke: color }, g);
+  s.text(g, -w / 2 + 8, 0, name, { 'text-anchor': 'start', 'font-size': compact ? 13 : 14, 'font-weight': 700, 'font-family': 'Consolas, monospace', fill: color });
+  for (let i = 0; i < count; i++) g.blocks.push(s.block(g.pos(i), 0, `${i}`, color, { parent: g, w: g.bw, h: g.bh, size: g.bs }));
   return g;
 }
 // Root coordinates of a node nested inside translated groups.
@@ -24,8 +24,8 @@ const nextSlot = (s, l) => { const [x, y] = abs(s, l); return [x + l.pos(l.block
 
 function broker(s, x, y, w, h, name, sub) {
   const b = s.box(x, y, w, h, '', { stroke: '#203347' });
-  b.title = s.text(b, 0, -h / 2 + 20, name, { 'font-size': 15, 'font-weight': 700 });
-  if (sub) s.text(b, 0, -h / 2 + 39, sub, { 'font-size': 11, fill: '#7b878f' });
+  b.title = s.text(b, 0, -h / 2 + 22, name, { 'font-size': 17, 'font-weight': 700 });
+  if (sub) s.text(b, 0, -h / 2 + 44, sub, { 'font-size': 14, fill: '#65727a' });
   b.online = true;
   return b;
 }
@@ -37,18 +37,18 @@ function setOnline(b, on) {
 }
 // Send a record toward a lane; fails visibly when the broker is offline.
 async function send(s, from, b, l, label = '') {
-  const r = s.block(from._x + 70, from._y, label, '#9aa3a9', { w: l.bw, h: 20 });
+  const r = s.block(from._x + 80, from._y, label, '#9aa3a9', { w: l.bw, h: l.bh, size: l.bs });
   if (!b.online) {
     await s.move(r, (from._x + b._x) / 2, (from._y + b._y) / 2, 500);
     r.rect.setAttribute('fill', RED);
     await s.shake(r);
-    await s.move(r, from._x + 70, from._y, 400);
+    await s.move(r, from._x + 80, from._y, 400);
     r.remove();
     return false;
   }
   await s.move(r, ...nextSlot(s, l), 650);
   r.remove();
-  l.blocks.push(s.block(l.pos(l.blocks.length), 0, `${l.blocks.length}`, l.color, { parent: l, w: l.bw, h: 20 }));
+  l.blocks.push(s.block(l.pos(l.blocks.length), 0, `${l.blocks.length}`, l.color, { parent: l, w: l.bw, h: l.bh, size: l.bs }));
   return true;
 }
 
@@ -61,16 +61,16 @@ export default {
   watch: {
     build(s) {
       const v = {};
-      v.broker = broker(s, 480, 235, 320, 300, 'Broker 1', 'one Kafka server process · port 9092');
-      v.disk = s.g(0, 30, v.broker);
-      el('rect', { x: -145, y: -88, width: 290, height: 190, rx: 6, fill: '#f5f5f5', stroke: '#d9d9d9' }, v.disk);
-      s.text(v.disk, -132, -70, '💽 disk · /var/kafka-logs', { 'text-anchor': 'start', 'font-size': 11, fill: '#7b878f' });
-      v.lanes = [['orders-0', PC[0], 2], ['orders-1', PC[1], 3], ['payments-0', PC[0], 1]].map(([n, c, k], i) => miniLane(s, v.disk, 0, -32 + i * 50, n, c, k, 260));
+      v.broker = broker(s, 480, 240, 340, 320, 'Broker 1', 'one Kafka server · port 9092');
+      v.disk = s.g(0, 34, v.broker);
+      el('rect', { x: -155, y: -92, width: 310, height: 206, rx: 8, fill: '#f5f5f5', stroke: '#d9d9d9' }, v.disk);
+      s.text(v.disk, -140, -72, '💽 disk · /var/kafka-logs', { 'text-anchor': 'start', 'font-size': 14, fill: '#65727a' });
+      v.lanes = [['orders-0', PC[0], 2], ['orders-1', PC[1], 3], ['payments-0', PC[0], 1]].map(([n, c, k], i) => miniLane(s, v.disk, 0, -32 + i * 54, n, c, k, 284));
       for (const l of v.lanes) l.setAttribute('opacity', 0);
       v.disk.setAttribute('opacity', 0);
       v.broker.setAttribute('opacity', 0);
-      v.producer = s.box(100, 235, 150, 60, 'Producer', { size: 13 });
-      v.consumer = s.box(860, 235, 150, 60, 'Consumer', { size: 13 });
+      v.producer = s.box(100, 240, 160, 64, 'Producer', { size: 16 });
+      v.consumer = s.box(860, 240, 160, 64, 'Consumer', { size: 16 });
       for (const n of [v.producer, v.consumer]) n.setAttribute('opacity', 0);
       return v;
     },
@@ -98,9 +98,9 @@ export default {
           await s.show(v.producer);
           await send(s, v.producer, v.broker, v.lanes[1]);
           const [ax, ay] = abs(s, v.lanes[1].blocks.at(-1));
-          v.ack = s.box(ax, ay - 32, 120, 26, '✓ ack · offset 3', { size: 11, fill: '#eef7e8', stroke: COMMIT, color: COMMIT, rx: 13 });
+          v.ack = s.box(ax, ay - 34, 160, 30, '✓ ack · offset 3', { size: 14, fill: '#eef7e8', stroke: COMMIT, color: COMMIT, rx: 15 });
           await s.pop(v.ack, 250);
-          await s.move(v.ack, 100, 185, 700);
+          await s.move(v.ack, 110, 184, 700);
         },
       },
       {
@@ -111,15 +111,15 @@ export default {
         async run(s, v) {
           await s.fade(v.ack, 0, 200);
           await s.show(v.consumer);
-          v.fetch = s.box(860, 185, 170, 26, 'fetch orders-1 @ 2', { size: 11, fill: '#e6f0ff', stroke: '#1677ff', color: '#1677ff', rx: 13 });
+          v.fetch = s.box(860, 184, 200, 30, 'fetch orders-1 @ 2', { size: 14, fill: '#e6f0ff', stroke: '#1677ff', color: '#1677ff', rx: 15 });
           await s.pop(v.fetch, 250);
-          await s.move(v.fetch, 640, 185, 600);
+          await s.move(v.fetch, 650, 184, 600);
           await s.fade(v.fetch, 0, 200);
           const l = v.lanes[1];
           await Promise.all(l.blocks.slice(2).map(async (b, i) => {
-            const c = s.block(...abs(s, b), `${i + 2}`, PC[1], { w: 24, h: 20 });
+            const c = s.block(...abs(s, b), `${i + 2}`, PC[1], { w: 30, h: 28, size: 13 });
             await s.wait(i * 250);
-            await s.move(c, 790, 235, 600);
+            await s.move(c, 780, 240, 600);
             c.remove();
           }));
           await s.pulse(v.consumer);
@@ -145,8 +145,8 @@ export default {
         async run(s, v) {
           await Promise.all([v.broker, v.producer, v.consumer].map(n => s.fade(n, 0, 400)));
           v.cluster = [['Broker 1', 'orders-0', PC[0]], ['Broker 2', 'orders-1', PC[1]], ['Broker 3', 'payments-0', PC[0]]].map(([name, part, c], i) => {
-            const b = broker(s, 230 + i * 250, 235, 210, 150, name);
-            miniLane(s, b, 0, 20, part, c, 3, 180, true);
+            const b = broker(s, 230 + i * 250, 240, 220, 150, name);
+            miniLane(s, b, 0, 20, part, c, 3, 200, true);
             b.setAttribute('opacity', 0);
             return b;
           });
@@ -168,10 +168,10 @@ export default {
     ],
     build(s) {
       const v = { message: 'All three brokers are online.' };
-      v.producer = s.box(95, 235, 140, 60, 'Producer', { size: 13 });
+      v.producer = s.box(98, 240, 160, 64, 'Producer', { size: 16 });
       v.brokers = [0, 1, 2].map(i => {
-        const b = broker(s, 340 + i * 220, 235, 190, 170, `Broker ${i + 1}`);
-        b.lane = miniLane(s, b, 0, 20, `orders-${i}`, PC[i], 1, 180, true);
+        const b = broker(s, 340 + i * 222, 240, 212, 170, `Broker ${i + 1}`);
+        b.lane = miniLane(s, b, 0, 20, `orders-${i}`, PC[i], 1, 198, true);
         return b;
       });
       return v;
@@ -196,10 +196,10 @@ export default {
     note: 'How clients find the right broker, and why brokers are fast.',
     build(s) {
       const v = {};
-      v.client = s.box(100, 150, 150, 60, 'Producer', { sub: 'bootstrap.servers=b1:9092', size: 13 });
+      v.client = s.box(110, 150, 196, 70, 'Producer', { sub: 'bootstrap: b1:9092', size: 16, subSize: 13 });
       v.brokers = [['Broker 1', 'orders-0', PC[0]], ['Broker 2', 'orders-1', PC[1]], ['Broker 3', 'orders-2', PC[2]]].map(([name, part, c], i) => {
-        const b = broker(s, 430 + i * 200, 150, 170, 120, name);
-        b.lane = miniLane(s, b, 0, 18, part, c, 1, 160, true);
+        const b = broker(s, 400 + i * 226, 150, 214, 124, name);
+        b.lane = miniLane(s, b, 0, 18, part, c, 1, 200, true);
         return b;
       });
       return v;
@@ -211,12 +211,12 @@ export default {
         observe: 'The metadata reply, then the record goes straight to Broker 2, which owns orders-1.',
         focus: v => [v.meta],
         async run(s, v) {
-          const ask = s.box(100, 150, 110, 24, 'metadata?', { size: 11, fill: '#e6f0ff', stroke: '#1677ff', color: '#1677ff', rx: 12 });
+          const ask = s.box(110, 150, 130, 30, 'metadata?', { size: 14, fill: '#e6f0ff', stroke: '#1677ff', color: '#1677ff', rx: 15 });
           await s.pop(ask, 200);
-          await s.move(ask, 430, 150, 600);
+          await s.move(ask, 400, 150, 600);
           ask.remove();
-          v.meta = s.box(270, 300, 250, 92, '', { fill: '#f7effb', stroke: '#9d4ccc' });
-          ['orders-0 → Broker 1', 'orders-1 → Broker 2', 'orders-2 → Broker 3'].forEach((t, i) => s.text(v.meta, 0, -26 + i * 26, t, { 'font-size': 12, 'font-family': 'Consolas, monospace' }));
+          v.meta = s.box(250, 320, 290, 110, '', { fill: '#f7effb', stroke: '#9d4ccc', rx: 8 });
+          ['orders-0 → Broker 1', 'orders-1 → Broker 2', 'orders-2 → Broker 3'].forEach((t, i) => s.text(v.meta, 0, -30 + i * 30, t, { 'font-size': 15, 'font-family': 'Consolas, monospace', 'font-weight': 700 }));
           await s.show(v.meta);
           await send(s, v.client, v.brokers[1], v.brokers[1].lane);
         },
@@ -234,12 +234,12 @@ export default {
         observe: 'Recent records are served from memory, not disk.',
         focus: v => [v.cache],
         async run(s, v) {
-          v.cache = s.box(830, 330, 190, 60, 'page cache (RAM)', { fill: '#fff8e6', stroke: '#e3b341', size: 13, sub: 'latest records' });
+          v.cache = s.box(830, 330, 220, 68, 'page cache (RAM)', { fill: '#fff8e6', stroke: '#e3b341', size: 15, sub: 'latest records', subSize: 13 });
           await s.show(v.cache);
-          const consumer = s.box(560, 400, 140, 50, 'Consumer', { size: 13 });
+          const consumer = s.box(560, 400, 160, 56, 'Consumer', { size: 16 });
           await s.show(consumer);
           for (let i = 0; i < 2; i++) {
-            const c = s.block(830, 330, '', PC[2], { w: 24, h: 20 });
+            const c = s.block(830, 330, '', PC[2], { w: 26, h: 24 });
             await s.move(c, 560, 380, 550);
             c.remove();
           }
@@ -249,11 +249,27 @@ export default {
     ],
   },
   takeaway: 'A broker is one Kafka server: it stores partition logs on disk, appends producer writes, and serves consumer fetches. Consumers pull. One broker alone is a single point of failure.',
+  recap: {
+    points: [
+      'A broker is one Kafka server process; clients connect on port 9092.',
+      'It stores partition logs as files on its disk, from many topics.',
+      'Producers send writes to it; it appends and acknowledges with the offset.',
+      'Consumers pull: they fetch from an offset at their own pace.',
+      'Clients find the right broker through metadata from any bootstrap broker.',
+      'One broker alone is a single point of failure; clusters and replication fix that.',
+    ],
+    interview: [
+      { q: 'What does a Kafka broker do?', a: 'A broker is a **Kafka server**. It **stores partitions** (as segment files on disk), **appends** records from producers, **serves fetches** to consumers and followers, and takes part in **replication**. A cluster spreads partitions over many brokers.' },
+      { q: 'Does Kafka push messages to consumers?', a: '**No, consumers pull.** They send fetch requests from their own offset, so each consumer reads at its **own pace**, can **batch** efficiently and can **replay** by moving its offset. Long polling (fetch.max.wait.ms) avoids busy loops.' },
+      { q: 'How does a client know which broker to talk to?', a: 'It is configured with **bootstrap.servers**, a few broker addresses. It asks one of them for **metadata**: brokers, partitions and each partition\'s **leader**. It then connects **directly** to the leader of each partition it needs, and refreshes metadata when leaders move.' },
+      { q: 'Why is Kafka fast on disk?', a: 'Writes are **sequential appends** to the end of a segment file, which disks do very fast. Recent data is served from the OS **page cache**, and reads use **zero-copy** (sendfile) from cache to socket. Batching and compression reduce the number of requests and bytes.' },
+    ],
+  },
   quiz: {
     q: 'There is no replication. Broker 2, which holds orders-1, crashes. What happens?',
     options: ['orders-1 is unavailable until Broker 2 returns', 'Kafka moves orders-1 to another broker automatically', 'orders-1\'s records are rebalanced into orders-0', 'Nothing, because consumers cached the data'],
     answer: 0,
     why: 'Without a copy elsewhere, the only replica of orders-1 is offline. Its data is safe on disk, but it cannot be read or written until the broker comes back. Replication (a later lesson) fixes this.',
   },
-  related: ['cluster', 'replica'],
+  related: ['cluster', 'replica', 'kraft'],
 };
