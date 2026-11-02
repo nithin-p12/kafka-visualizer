@@ -5,28 +5,33 @@ import { Cancelled } from './scene.js';
 // Each step first gives the reader time to read the guide ("reading"), then animates ("running"),
 // then holds briefly ("holding") before moving on. Paused, it waits for Play before animating.
 export class Player {
-  constructor(stage, on) { this.stage = stage; this.on = on; this.run = 0; this.userPaused = false; this.phase = 'idle'; }
+  constructor(stage, on) { this.stage = stage; this.on = on; this.run = 0; this.userPaused = false; this.phase = 'idle'; this.loop = false; }
   load(track) { this.track = track; this.userPaused = false; this.stage.clock.paused = false; this.seek(0); }
   stop() { this.run++; this.stage.clock.cancel(); this.skip = null; this.phase = 'idle'; }
   get count() { return this.track?.steps.length ?? 0; }
 
-  // read: false skips the reading pause (used by "Replay step").
-  async seek(i, { read = true } = {}) {
+  // read: false skips the reading pause (used by "Replay step"). cont: true carries on from the scene the previous
+  // step left on screen instead of rebuilding it (tracks marked `continuous`), so CSS transitions keep running.
+  // A track may have `enter(stage, v, i)`, called once the scene is ready, before the reading pause.
+  async seek(i, { read = true, cont = false } = {}) {
     const run = ++this.run, { stage, track } = this;
     i = Math.max(0, Math.min(i, this.count - 1));
-    stage.reset();
-    stage.clock.paused = false;
+    if (!cont) { stage.reset(); stage.clock.paused = false; }
     this.i = i; this.phase = 'running';
     this.on.step(i, track.steps[i]);
-    const v = track.build(stage);
-    stage.clock.instant = true;
-    for (let k = 0; k < i; k++) await track.steps[k].run(stage, v);
-    stage.clock.instant = false;
-    if (run !== this.run) return;
-    this.v = v;
+    let v = this.v;
+    if (!cont) {
+      stage.clock.instant = true;
+      v = await track.build(stage);
+      for (let k = 0; k < i; k++) await track.steps[k].run(stage, v);
+      stage.clock.instant = false;
+      if (run !== this.run) return;
+      this.v = v;
+    }
+    track.enter?.(stage, v, i);
     this.on.started?.(i, track.steps[i], v);
     try {
-      if (read) { await this.read(track.steps[i], run); if (run !== this.run) return; }
+      if (read && !this.loop) { await this.read(track.steps[i], run); if (run !== this.run) return; }
       this.phase = 'running'; this.on.state();
       await track.steps[i].run(stage, v);
       if (run !== this.run) return;
@@ -57,12 +62,13 @@ export class Player {
   }
   // A short pause after the animation, so the "watch for" hint can be checked against the result.
   hold(step) {
-    const ms = 1800 + (step.observe?.length ?? 0) * 35;
+    const ms = this.loop ? 450 : 1800 + (step.observe?.length ?? 0) * 35;
     this.phase = 'holding'; this.on.state();
     return this.stage.clock.tween(ms, t => this.on.hold(t), true).finally(() => this.on.hold(0));
   }
   advance() {
-    if (this.i + 1 < this.count) return this.seek(this.i + 1);
+    if (this.i + 1 < this.count) return this.seek(this.i + 1, { cont: !!this.track.continuous });
+    if (this.loop) return this.seek(0);
     this.phase = 'done'; this.on.state(); this.on.done();
   }
   play() {

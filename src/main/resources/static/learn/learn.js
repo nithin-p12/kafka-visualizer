@@ -32,6 +32,7 @@ const watchTrack = (l, id) => flowsOf(l).find(f => f.id === id)?.track ?? l.watc
 const player = new Player(stage, {
   step(i, step) { renderStep(i, step); },
   async started(i) {
+    if (docked()) return;
     const run = ++previewRun;
     const preview = await previewStep(i);
     if (run === previewRun && player.i === i) { lastPreview = preview; placeGuide({ keep: true }); }
@@ -67,7 +68,7 @@ async function previewStep(i) {
   try {
     ghost.reset();
     ghost.clock.instant = true;
-    const v = track.build(ghost);
+    const v = await track.build(ghost);
     for (let k = 0; k <= i; k++) await track.steps[k].run(ghost, v);
     // The real ring is drawn 8 units out with a pulsing ~4-unit stroke; keep clear of all of it.
     const pad = 14 * Math.min($('ghost').getBoundingClientRect().width / 960, $('ghost').getBoundingClientRect().height / 460);
@@ -79,6 +80,8 @@ async function previewStep(i) {
 function placeGuide({ keep = false } = {}) {
   const c = $('guide-card');
   c.hidden = !(current && mode !== 'try' && $('recap').hidden && player.track);
+  layoutPanel();
+  if (docked()) { c.classList.remove('v-nonext', 'v-nowatch', 'v-title'); c.style.left = c.style.top = c.style.width = ''; guidePos = null; $('gc-min').textContent = '–'; return; }
   if (c.hidden || getComputedStyle(c).position === 'static') return;
   const wrap = $('stage-wrap').getBoundingClientRect(), W = wrap.width, H = wrap.height, m = 10, top = 44;
   const local = b => ({ l: b.left - wrap.left, t: b.top - wrap.top, r: b.right - wrap.left, b: b.bottom - wrap.top });
@@ -151,6 +154,23 @@ new ResizeObserver(async () => {
   placeGuide({ keep: true });
 }).observe($('stage-wrap'));
 function clearSpotlight() { stage.clearSpotlight(); }
+// Lessons marked `docked` keep the guide in a fixed panel beside the scene instead of a floating card. The panel
+// steps aside (full-width scene plus a one-line caption) in Loop mode or when minimised with M.
+const docked = () => !!current?.docked && mode !== 'try';
+function layoutPanel() {
+  const card = document.querySelector('.stage-card');
+  card.classList.toggle('docked', docked());
+  card.classList.toggle('panel-off', docked() && (player.loop || guideMinOn));
+  $('loop').hidden = !current?.docked || mode === 'try';
+  $('loop').classList.toggle('selected', player.loop);
+  $('loop').setAttribute('aria-pressed', player.loop);
+}
+function setLoop(on) {
+  player.loop = on;
+  layoutPanel();
+  if (on && player.phase === 'reading') player.startNow();
+  if (on && player.phase === 'done') player.play();
+}
 // guideMinOn: the reader chose a title-only card (remembered). guideFullStep: the reader asked for the whole card on a
 // step where it had been shortened to stay clear of the scene (until the next step).
 let guideMinOn = false, guideFullStep = false;
@@ -161,7 +181,8 @@ const setGuideMin = on => {
 };
 // + shows everything (undoing a minimise or an automatic shortening); – minimises.
 function toggleGuideCard() {
-  if (guideMinOn) setGuideMin(false);
+  if (docked()) setGuideMin(!guideMinOn);
+  else if (guideMinOn) setGuideMin(false);
   else if (guidePos?.variant.length) { guideFullStep = true; placeGuide({ keep: true }); }
   else setGuideMin(true);
 }
@@ -360,6 +381,7 @@ $('recap-close').addEventListener('click', () => showRecap(false));
 $('try-recap').addEventListener('click', () => showRecap(true));
 
 function renderDots(steps) {
+  $('dots').classList.toggle('many', steps.length > 18);
   $('dots').innerHTML = steps.map((s, i) => `<button class="dot" data-step="${i}" title="${esc(s.title)}" aria-label="Step ${i + 1}: ${esc(s.title)}"></button>`).join('')
     + '<button class="dot recap-dot" id="recap-dot" title="Recap and quick check" aria-label="Recap and quick check">✓ Recap</button>';
   for (const d of $('dots').querySelectorAll('[data-step]')) d.addEventListener('click', () => player.seek(+d.dataset.step));
@@ -374,7 +396,13 @@ function renderStep(i, step) {
   showRecap(false);
   clearSpotlight();
   const fl = mode === 'watch' && flowsOf(current).find(f => f.id === flow);
-  $('step-count').textContent = `${mode === 'deeper' ? 'Deep dive · ' : fl ? `${fl.short ?? fl.label} · ` : ''}Step ${i + 1} of ${steps.length}`;
+  $('step-count').textContent = step.phase ? `Event ${i + 1} / ${steps.length}`
+    : `${mode === 'deeper' ? 'Deep dive · ' : fl ? `${fl.short ?? fl.label} · ` : ''}Step ${i + 1} of ${steps.length}`;
+  $('loop-caption').innerHTML = `<b>${i + 1}/${steps.length}</b> ${esc(step.title)}`;
+  // Docked lessons list their parts (Producer › Leader write › …) and mark where this event is.
+  const phases = [...new Set(steps.map(s => s.phase).filter(Boolean))], at = phases.indexOf(step.phase);
+  $('gc-phases').hidden = !phases.length;
+  $('gc-phases').innerHTML = phases.map((ph, k) => `<li class="${k < at ? 'done' : k === at ? 'current' : ''}">${esc(ph)}</li>`).join('');
   $('step-title').textContent = step.title;
   $('step-text').textContent = step.text;
   $('g-observe').textContent = step.observe ?? '';
@@ -402,6 +430,7 @@ $('gc-go').addEventListener('click', () => player.phase === 'reading' ? player.s
 $('prev-step').addEventListener('click', () => player.prev());
 $('next-step').addEventListener('click', () => player.next());
 $('replay').addEventListener('click', () => player.seek(0));
+$('loop').addEventListener('click', () => setLoop(!player.loop));
 
 const speed = read('kafka-learn-speed', 1);
 function setSpeed(x) {
@@ -529,6 +558,7 @@ addEventListener('keydown', e => {
   else if (k === 'g') setGuide(!guideOn);
   else if (k === 'r') showRecap(!recapOn);
   else if (k === 'm') toggleGuideCard();
+  else if (k === 'l' && current?.docked && playing) setLoop(!player.loop);
   else if (e.key === 'Escape' && recapOn && !document.fullscreenElement) showRecap(false);
 });
 

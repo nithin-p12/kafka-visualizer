@@ -204,6 +204,8 @@ a.card:hover { border-color: var(--lv); box-shadow: 0 6px 18px #20334714; transf
 .dots { display: flex; align-items: center; gap: 6px; margin: 0 auto; padding: 0 8px; }
 .dot { width: 12px; height: 12px; padding: 0; border-radius: 50%; background: #e4e6e8; border: 0; }
 .dot.seen { background: #91caff; }
+.dots.many { gap: 4px; }
+.dots.many .dot:not(.recap-dot) { width: 9px; height: 9px; }
 .dot.current { background: var(--primary); box-shadow: 0 0 0 3px #1677ff33; }
 .dot.recap-dot { width: auto; height: 20px; padding: 0 9px; border-radius: 10px; font-size: 11px; font-weight: 700; line-height: 20px; color: var(--success); background: #eef7e8; margin-left: 4px; }
 .speed button { padding: 6px 9px; font-size: 12px; }
@@ -321,3 +323,39 @@ a.card:hover { border-color: var(--lv); box-shadow: 0 6px 18px #20334714; transf
   .controls > button { flex: 1; padding: 7px 6px; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .learn-ring, .guide-card-run, .recap { animation: none; } .guide-card-run { transition: none; } a.card:hover { transform: none; } .lesson-mode .learn-bar { transition: none; } }
+
+/* docked guide: a fixed panel beside the scene (lessons with `docked`); Loop mode or M hides it for a full-width scene */
+.loop-caption { display: none; position: absolute; left: 12px; top: 10px; max-width: calc(100% - 260px); margin: 0; padding: 5px 14px; border-radius: 16px; background: #ffffffe8; border: 1px solid #d8b7e9; color: #2b1d3a; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 1; }
+.loop-caption b { color: var(--guide); margin-right: 6px; }
+.gc-phases { display: none; }
+#loop.selected { background: var(--guide-soft); border-color: #d8b7e9; color: #614373; }
+@media (min-width: 601px) {
+  .docked:not(.panel-off) #stage, .docked:not(.panel-off) #ghost { width: calc(100% - 340px); }
+  .docked:not(.panel-off) .view-tools { right: 350px; }
+  .docked .guide-card-run { left: auto; right: 10px; top: 10px; bottom: 10px; width: 320px; max-width: none; overflow: auto; transition: none; animation: none; display: flex; flex-direction: column; gap: 4px; padding: 12px 16px 14px; box-shadow: 0 4px 18px #38204d18; }
+  .docked .guide-card-run h2 { font-size: 18px; margin: 4px 0 6px; }
+  .docked #step-text { font-size: 15px; line-height: 1.6; }
+  .docked .gc-body { gap: 10px; }
+  .docked .gc-next { margin-top: auto; padding-top: 6px; }
+  .docked .gc-phases { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; margin: 0 0 4px; padding: 0; }
+  .docked .gc-phases[hidden] { display: none; }
+  .docked .gc-phases li { font-size: 11.5px; font-weight: 650; padding: 1px 8px; border-radius: 10px; background: #f0f1f4; color: #8a959c; }
+  .docked .gc-phases li.done { background: #eef7e8; color: var(--success); }
+  .docked .gc-phases li.current { background: var(--guide); color: #fff; }
+  .docked.panel-off .guide-card-run { display: none; }
+  .docked.panel-off .loop-caption { display: block; }
+}
+
+/* flow-map scenes (journey): every node and wire is drawn from the start; the current event's nodes and wire stay
+   sharp, the rest blur back; travelled wires stay as a faint trail */
+#stage .jn, #stage .jw, #stage .jt { transition: opacity .55s ease, filter .55s ease, stroke .4s ease; }
+#stage .dim { opacity: .4; filter: blur(.9px); }
+#stage .ctx { opacity: .75; }
+.jw { fill: none; stroke: #d3d9e0; stroke-width: 1.6; }
+.jw.trail { stroke: #a9bde3; stroke-width: 2; }
+.jw.live { stroke: var(--wc, #2f6fe0); stroke-width: 3; }
+.jw.hidden-wire { stroke: none; }
+#stage .jn.on > rect:first-of-type { stroke: var(--nc, #2f6fe0); stroke-width: 2.4; }
+#stage .jn.hit > rect:first-of-type { animation: jn-hit .7s ease-out; }
+@keyframes jn-hit { 0% { filter: drop-shadow(0 0 0 #2f6fe000); } 35% { filter: drop-shadow(0 0 9px #2f6fe0aa); } 100% { filter: drop-shadow(0 0 0 #2f6fe000); } }
+@media (prefers-reduced-motion: reduce) { #stage .jn, #stage .jw, #stage .jt { transition: none; } #stage .jn.hit > rect:first-of-type { animation: none; } }
