@@ -4,7 +4,9 @@ Interactive Apache Kafka architecture and message-flow **simulation** for Senior
 
 ## Run on Windows 11
 
-Open PowerShell:
+**Quickest:** double-click **`Start Kafka Lab.vbs`** in the project folder. It starts the app in the background (no console or IDE window), waits until it is up, and opens the home page in Chrome. If the app is already running, it just opens the page. Double-click **`Stop Kafka Lab.vbs`** to stop it. The log goes to `target\kafka-lab.log`. For one-click access, right-click `Start Kafka Lab.vbs` → *Show more options* → *Send to* → *Desktop (create shortcut)*.
+
+Or from PowerShell:
 
 ```powershell
 git clone https://github.com/nithin-p12/kafka-visualizer.git

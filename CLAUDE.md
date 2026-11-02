@@ -17,7 +17,7 @@ The server runs on **http://127.0.0.1:8888** (`application.yaml`). `StartupUrls.
 
 ## Running and seeing changes
 
-- Start: `.\mvnw.cmd spring-boot:run` (or run `KafkaVisualizerApplication` in IntelliJ).
+- Start: the user double-clicks `Start Kafka Lab.vbs` (runs `scripts/kafka-lab.ps1 start`: `mvnw spring-boot:run` hidden, log in `target/kafka-lab.log`, opens Chrome once port 8888 answers); `Stop Kafka Lab.vbs` kills the process listening on 8888. From a shell: `.\mvnw.cmd spring-boot:run`. The user does not want to keep IntelliJ open just to run the app.
 - The running server serves static files from `target/classes/static`, not `src/`. After editing static files, copy them over so a refresh shows the change without a restart:
   `cp -r src/main/resources/static/. target/classes/static/`
 - Java changes need a restart.
