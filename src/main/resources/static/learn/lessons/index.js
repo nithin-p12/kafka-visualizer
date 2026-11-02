@@ -11,8 +11,9 @@ import consumer from './consumer.js';
 import group from './group.js';
 import commitLag from './commit-lag.js';
 import retention from './retention.js';
+import journey from './journey.js';
 
-export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention];
+export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, journey];
 
 export const LEVELS = [
   {
@@ -36,7 +37,7 @@ export const LEVELS = [
   },
   {
     id: 'e2e', title: 'Level 3 · End to end', blurb: 'One record\'s full journey, then the live Visualizer.',
-    items: [{ id: 'journey', title: 'Journey of one message', tagline: 'From send() to commit, every stage' }],
+    items: ['journey'],
   },
   {
     id: 'deep', title: 'Level 4 · Deep dives (optional)', blurb: 'Interview-level internals. Leave these until the flow above makes sense.',

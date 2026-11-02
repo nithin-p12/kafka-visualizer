@@ -33,7 +33,7 @@ Open **http://localhost:8888/learn.html** (or the **Learn** card on the home pag
 
 1. **Atoms**: one component at a time. All twelve are built: Record, Topic, Partition, Offset, Broker, Cluster, Replica, Producer, Consumer, Consumer group, Commit & lag, Retention.
 2. **Links**: how two components interact (key routing, acks, replication, election, assignment, rebalance, redelivery, multiple groups).
-3. **End to end**: one message's full journey, then the live Visualizer.
+3. **End to end**: one message's full journey, request by request (metadata, partitioner, the leader's .log/.index/.timeindex, follower fetches, high watermark, ack, consumer fetch and commit), with separate flows for acks=all, acks=1 and acks=0. Crash flows are next.
 4. **Deep dives (optional)**: ISR/high watermark, batching, idempotence, KRaft. Kept separate so the main path stays light.
 
 Each lesson has three tabs. **Watch** plays a step-by-step animation by itself, with a caption per step; pause (Space), step (← →), jump with the step dots, replay and change speed. **Try it** puts you in control of the same scene with buttons (for example, choose a key and see which partition Kafka's real murmur2 partitioner picks, or crash a consumer before committing). **Go deeper** is an optional extra track. A takeaway and one interview-style check follow each lesson.

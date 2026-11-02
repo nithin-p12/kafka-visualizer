@@ -23,6 +23,11 @@ const stage = new Stage($('stage'));
 // can be placed against the step's final picture (and its spotlight) before the step plays, and then stay put.
 const ghost = new Stage($('ghost'));
 let pausedByRecap = false, current = null, mode = 'watch', guideOn = read('kafka-learn-guide', true), tryState = null;
+// Lessons with `flows` (e.g. the end-to-end journey) have several Watch stories; `flow` is the one playing.
+let flow = null;
+progress.flows ??= {};
+const flowsOf = l => (l?.flows ?? []).filter(f => !f.soon);
+const watchTrack = (l, id) => flowsOf(l).find(f => f.id === id)?.track ?? l.watch;
 
 const player = new Player(stage, {
   step(i, step) { renderStep(i, step); },
@@ -37,6 +42,7 @@ const player = new Player(stage, {
   state: renderPlayState,
   done() {
     if (mode === 'watch' && !progress.done.includes(current.id)) progress.done.push(current.id);
+    if (mode === 'watch' && flow) { const seen = progress.flows[current.id] ?? []; if (!seen.includes(flow)) progress.flows[current.id] = [...seen, flow]; renderFlows(); }
     markVisited(mode);
     showRecap(true);
   },
@@ -168,7 +174,7 @@ function setGuide(on) {
   $('guide-btn').setAttribute('aria-pressed', on);
   document.body.classList.toggle('guide-off', !on);
   if (!on) clearSpotlight();
-  else if (current && mode !== 'try' && player.phase !== 'running' && player.v) { const s = current[mode === 'deeper' ? 'deeper' : 'watch'].steps[player.i]; if (s?.focus) spotlight(s.focus(player.v)); }
+  else if (current && mode !== 'try' && player.phase !== 'running' && player.v) { const s = player.track.steps[player.i]; if (s?.focus) spotlight(s.focus(player.v)); }
 }
 $('guide-toggle').addEventListener('change', e => setGuide(e.target.checked));
 $('guide-btn').addEventListener('click', () => setGuide(!guideOn));
@@ -221,9 +227,10 @@ function renderMap() {
 function renderContinue(nextUp) {
   const last = progress.last, l = last && lessonById(last.id), c = $('continue');
   if (l) {
-    const track = last.mode === 'deeper' ? l.deeper : l.watch, total = track.steps.length, step = Math.min(last.step ?? 0, total - 1);
+    const track = last.mode === 'deeper' ? l.deeper : watchTrack(l, last.flow), total = track.steps.length, step = Math.min(last.step ?? 0, total - 1);
     const where = last.mode === 'try' ? 'Try it' : `${MODE_NAMES[last.mode] ?? 'Watch'} · step ${step + 1} of ${total}`;
-    c.href = `#/${l.id}/${last.mode}/${last.mode === 'try' ? 0 : step}`;
+    const fl = last.mode === 'watch' && flowsOf(l).find(f => f.id === last.flow);
+    c.href = `#/${l.id}/${fl ? fl.id : last.mode}/${last.mode === 'try' ? 0 : step}`;
     c.innerHTML = `<span class="eyebrow">Continue where you left off</span><strong>${l.n} · ${esc(l.title)}</strong><small>${esc(where)}</small>`
       + `<span class="bar"><span style="width:${last.mode === 'try' ? 100 : (step + 1) / total * 100}%"></span></span><span class="go">Continue →</span>`;
   } else {
@@ -262,7 +269,10 @@ function openLesson(l, resume = {}) {
   $('related').innerHTML = l.related.map(id => lessonById(id) ? `<a href="#/${id}">${esc(titleOf(id))}</a>` : '').join('');
   arrow($('prev-lesson'), LESSONS[i - 1], 'Previous');
   arrow($('next-lesson'), LESSONS[i + 1], 'Next');
-  setMode(['watch', 'try', 'deeper'].includes(resume.mode) ? resume.mode : 'watch', resume.step);
+  const asFlow = flowsOf(l).find(f => f.id === resume.mode);
+  flow = l.flows ? (asFlow ?? flowsOf(l).find(f => f.id === progress.last?.flow && progress.last?.id === l.id) ?? flowsOf(l)[0]).id : null;
+  renderFlows();
+  setMode(asFlow ? 'watch' : ['watch', 'try', 'deeper'].includes(resume.mode) ? resume.mode : 'watch', resume.step);
   document.title = `${l.title} · Learn Kafka`;
 }
 function arrow(a, l, dir) {
@@ -293,18 +303,27 @@ function setMode(m, step = 0) {
   $('player-ui').hidden = m === 'try';
   $('try-panel').hidden = m !== 'try';
   $('deeper-note').hidden = m !== 'deeper';
+  $('flow-bar').hidden = !(current.flows && m === 'watch');
   showRecap(false);
   renderPlayState();
   window.scrollTo(0, 0);
   if (m === 'try') return openTry();
   tryState = null;
-  const track = m === 'deeper' ? current.deeper : current.watch;
+  const track = m === 'deeper' ? current.deeper : watchTrack(current, flow);
   $('deeper-text').textContent = current.deeper.note;
   renderDots(track.steps);
   player.load(track);
   if (step > 0) player.seek(step);
 }
 for (const b of document.querySelectorAll('.modes [data-mode]')) b.addEventListener('click', () => setMode(b.dataset.mode));
+
+// Flow chips: one per Watch story of a lesson with `flows`; "soon" ones are shown but disabled.
+function renderFlows() {
+  const flows = current?.flows ?? [], seen = progress.flows[current?.id] ?? [];
+  $('flow-chips').innerHTML = flows.map(f => `<button class="flow-chip${f.id === flow ? ' selected' : ''}${seen.includes(f.id) ? ' seen' : ''}" data-flow="${f.id}"${f.soon ? ' disabled title="Coming soon"' : ` title="${esc(f.about)}"`}>${esc(f.label)}${f.soon ? ' <small>soon</small>' : ''}</button>`).join('');
+  $('flow-about').textContent = flows.find(f => f.id === flow)?.about ?? '';
+  for (const b of $('flow-chips').querySelectorAll('[data-flow]:not([disabled])')) b.addEventListener('click', () => { flow = b.dataset.flow; renderFlows(); setMode('watch'); });
+}
 
 // The recap is the lesson's hub: takeaway, interview answers, quick check, and the path to every other part.
 function showRecap(on) {
@@ -350,11 +369,12 @@ function renderStep(i, step) {
   const steps = player.track.steps;
   lastPreview = null;
   guideFullStep = false;
-  progress.last = { id: current.id, mode, step: i };
+  progress.last = { id: current.id, mode, step: i, ...(flow && mode === 'watch' ? { flow } : {}) };
   save('kafka-learn-progress', progress);
   showRecap(false);
   clearSpotlight();
-  $('step-count').textContent = `${mode === 'deeper' ? 'Deep dive · ' : ''}Step ${i + 1} of ${steps.length}`;
+  const fl = mode === 'watch' && flowsOf(current).find(f => f.id === flow);
+  $('step-count').textContent = `${mode === 'deeper' ? 'Deep dive · ' : fl ? `${fl.short ?? fl.label} · ` : ''}Step ${i + 1} of ${steps.length}`;
   $('step-title').textContent = step.title;
   $('step-text').textContent = step.text;
   $('g-observe').textContent = step.observe ?? '';

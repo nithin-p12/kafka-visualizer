@@ -158,6 +158,18 @@ a.card:hover { border-color: var(--lv); box-shadow: 0 6px 18px #20334714; transf
 .tool { padding: 4px 10px; font-size: 12px; background: #ffffffd9; color: var(--muted); }
 .tool.selected { background: var(--guide-soft); border-color: #d8b7e9; color: #614373; }
 
+/* flow chips: lessons with several Watch stories (one row, never wraps) */
+.flow-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-bottom: 1px solid #eceef0; white-space: nowrap; overflow: hidden; }
+.flow-label { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.flow-chips { display: flex; gap: 6px; }
+.flow-chip { padding: 3px 12px; border-radius: 14px; font-size: 13px; color: var(--ink); border-color: #c9dafb; }
+.flow-chip:hover { background: #edf3fe; }
+.flow-chip.selected { background: #2f6fe0; border-color: #2f6fe0; color: #fff; }
+.flow-chip.seen::after { content: ' ✓'; color: var(--success); font-weight: 700; }
+.flow-chip.selected.seen::after { color: #fff; }
+.flow-chip small { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.flow-about { margin-left: 6px; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+
 /* the guide card: the whole step in one place, inside the scene, next to whatever is spotlighted */
 .guide-card-run { position: absolute; z-index: 1; width: 400px; max-width: calc(100% - 20px); padding: 10px 14px 12px; background: #fffffff2; border: 1px solid #d8b7e9; border-left: 4px solid var(--guide); border-radius: 9px; box-shadow: 0 8px 28px #38204d26; transition: left .4s ease, top .4s ease; animation: callout-in .25s ease-out; }
 .gc-head { display: flex; align-items: center; gap: 8px; }
