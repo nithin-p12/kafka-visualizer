@@ -1,4 +1,4 @@
-﻿# Starts or stops the Kafka Lab app in the background, with no console window.
+# Starts or stops the Kafka Lab app in the background, with no console window.
 # Usually run through "Start Kafka Lab.vbs" / "Stop Kafka Lab.vbs" in the project folder.
 #   kafka-lab.ps1 start   start the app, show a tray icon (open tabs, quit) and open it in Chrome
 #   kafka-lab.ps1 stop    stop the app (the tray icon goes away by itself)
@@ -33,7 +33,7 @@ function Stop-App {
         ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 }
 
-# The PN brand mark (same shapes as static/brand-logo.svg) on a white tile, for the tray.
+# The PN brand mark in Kafka Lab purple (same shapes as static/brand-logo.svg) on a white tile, for the tray.
 function New-TrayIcon {
     $bmp = New-Object System.Drawing.Bitmap 32, 32
     $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -51,7 +51,8 @@ function New-TrayIcon {
     $n.AddBezier((& $pt 121 64), (& $pt 121 82), (& $pt 105 97), (& $pt 88 99.5))
     $n.AddLines([System.Drawing.PointF[]]@((& $pt 88 99.5), (& $pt 54 99.5), (& $pt 64.2 67.2), (& $pt 86 92), (& $pt 102.5 32.5)))
     $n.CloseFigure()
-    $g.FillPath([System.Drawing.Brushes]::Black, $p); $g.FillPath([System.Drawing.Brushes]::Black, $n)
+    $purple = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(0x7c, 0x3a, 0xed))
+    $g.FillPath($purple, $p); $g.FillPath($purple, $n)
     $g.Dispose()
     [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
 }
