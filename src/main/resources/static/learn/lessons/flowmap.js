@@ -88,6 +88,8 @@ export function focus(v, on = [], wires = [], trail = []) {
   const set = new Set(on), parent = v.parent ?? {}, ctx = new Set();
   // Every frame around a lit node (and around that frame) stays readable.
   for (const k of on) for (let p = parent[k]; p; p = parent[p]) ctx.add(p);
+  // …and so does everything inside a lit frame (its rows and nodes), so lighting a frame never blurs its content.
+  for (const k of Object.keys(v.n)) for (let p = parent[k]; p; p = parent[p]) if (set.has(p)) { ctx.add(k); break; }
   for (const [k, n] of Object.entries(v.n)) {
     const lit = set.has(k);
     n.classList.toggle('on', lit);
