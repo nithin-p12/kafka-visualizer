@@ -20,8 +20,9 @@ import rebalance from './rebalance.js';
 import redelivery from './redelivery.js';
 import multiGroup from './multi-group.js';
 import journey from './journey.js';
+import isr from './isr.js';
 
-export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, election, assignment, rebalance, redelivery, multiGroup, journey];
+export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, election, assignment, rebalance, redelivery, multiGroup, journey, isr];
 
 export const LEVELS = [
   {
@@ -50,7 +51,7 @@ export const LEVELS = [
   {
     id: 'deep', title: 'Level 4 · Deep dives (optional)', blurb: 'Interview-level internals. Leave these until the flow above makes sense.',
     items: [
-      { id: 'isr', title: 'ISR & high watermark', tagline: 'What "committed" means on the broker' },
+      'isr',
       { id: 'batching', title: 'Batching & compression', tagline: 'linger.ms, batch.size' },
       { id: 'idempotence', title: 'Idempotent producer & exactly-once', tagline: 'No duplicates on retry' },
       { id: 'kraft', title: 'KRaft controller', tagline: 'Who manages cluster metadata' },
