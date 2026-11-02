@@ -11,9 +11,10 @@ import consumer from './consumer.js';
 import group from './group.js';
 import commitLag from './commit-lag.js';
 import retention from './retention.js';
+import keyRouting from './key-routing.js';
 import journey from './journey.js';
 
-export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, journey];
+export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, journey];
 
 export const LEVELS = [
   {
@@ -25,7 +26,7 @@ export const LEVELS = [
   {
     id: 'links', title: 'Level 2 · Links', blurb: 'How two components talk to each other.',
     items: [
-      { id: 'key-routing', title: 'Key → partition', tagline: 'Producer ↔ partition' },
+      'key-routing',
       { id: 'acks', title: 'acks = 0 / 1 / all', tagline: 'Producer ↔ leader ↔ followers' },
       { id: 'replication', title: 'Replication flow', tagline: 'Leader → followers' },
       { id: 'election', title: 'Leader election', tagline: 'Broker failure → new leader' },

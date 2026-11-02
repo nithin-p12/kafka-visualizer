@@ -447,10 +447,12 @@ function openTry() {
   save('kafka-learn-progress', progress);
   clearSpotlight();
   const t = current.tryIt, input = {};
-  for (const c of t.controls) if (c.type === 'choice') input[c.name] = c.options[0];
+  for (const c of t.controls) if (c.type === 'choice') input[c.name] = c.options[0]; else if (c.type === 'text') input[c.name] = c.value ?? '';
   $('g-observe').textContent = t.observe;
   $('try-intro').textContent = t.intro;
-  $('try-controls').innerHTML = t.controls.map((c, i) => c.type === 'choice'
+  $('try-controls').innerHTML = t.controls.map((c, i) => c.type === 'text'
+    ? `<label class="try-text"><span>${esc(c.label)}</span><input data-text="${i}" value="${esc(input[c.name])}" placeholder="${esc(c.placeholder ?? '')}" maxlength="${c.max ?? 24}" spellcheck="false" autocomplete="off"></label>`
+    : c.type === 'choice'
     ? `<div class="choice" role="group" aria-label="${esc(c.label)}"><span>${esc(c.label)}</span>${c.options.map(o => `<button data-choice="${i}" data-value="${esc(o)}" class="${o === input[c.name] ? 'selected' : ''}">${esc(o)}</button>`).join('')}</div>`
     : `<button data-action="${i}" class="${c.primary ? 'primary' : ''}">${esc(c.label)}</button>`).join('');
   tryState = { input, token: {}, busy: false };
@@ -462,6 +464,11 @@ function openTry() {
     if (c.rebuild) buildTry();
   });
   for (const b of $('try-controls').querySelectorAll('[data-action]')) b.addEventListener('click', () => runAction(t.controls[b.dataset.action], b));
+  // Text boxes: typing updates the input; Enter presses the primary button.
+  for (const box of $('try-controls').querySelectorAll('[data-text]')) {
+    box.addEventListener('input', () => { input[t.controls[box.dataset.text].name] = box.value; });
+    box.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('try-controls').querySelector('button.primary[data-action]')?.click(); } });
+  }
 }
 function buildTry() {
   const t = current.tryIt;

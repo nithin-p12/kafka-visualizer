@@ -415,7 +415,7 @@ export default {
   id: 'retention', n: 12, title: 'Retention', tagline: 'When old records disappear',
   guide: {
     what: 'Kafka does not keep records forever. Each topic deletes old data by age (retention.ms) or size (retention.bytes), a whole segment file at a time, whether or not anyone has read it.',
-    fits: 'Last atom: once you know records, partitions, brokers, producers and consumers, retention explains how long data lives. Next: the journey of one message, every piece working together.',
+    fits: 'Last atom: once you know records, partitions, brokers, producers and consumers, retention explains how long data lives. Next level: Links, how two pieces talk, starting with key → partition.',
   },
   watch,
   tryIt,
