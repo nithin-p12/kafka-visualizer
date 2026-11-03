@@ -363,3 +363,15 @@ a.card:hover { border-color: var(--lv); box-shadow: 0 6px 18px #20334714; transf
 #stage .jn.hit > rect:first-of-type { animation: jn-hit .7s ease-out; }
 @keyframes jn-hit { 0% { filter: drop-shadow(0 0 0 #2f6fe000); } 35% { filter: drop-shadow(0 0 9px #2f6fe0aa); } 100% { filter: drop-shadow(0 0 0 #2f6fe000); } }
 @media (prefers-reduced-motion: reduce) { #stage .jn, #stage .jw, #stage .jt { transition: none; } #stage .jn.hit > rect:first-of-type { animation: none; } }
+/* glow map (journey): nothing blurs; the current components glow in the event's colour, the wire in use flows,
+   travelled wires stay as a soft trail in their topic's colour */
+#stage .gn > rect:first-of-type { transition: stroke .35s ease, stroke-width .35s ease, filter .35s ease; }
+#stage .gn.on > rect:first-of-type { stroke: var(--nc, #2f6fe0); stroke-width: 2.8; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--nc, #2f6fe0) 45%, transparent)); }
+#stage .gn.hit > rect:first-of-type { animation: gn-hit .7s ease-out; }
+@keyframes gn-hit { 35% { filter: drop-shadow(0 0 12px color-mix(in srgb, var(--nc, #2f6fe0) 70%, transparent)); } }
+.gw { fill: none; stroke: #e3e7eb; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: stroke .45s ease, stroke-width .45s ease, opacity .45s ease; }
+.gw.trail { stroke: var(--tc, #2f6fe0); stroke-width: 2.2; opacity: .35; }
+.gw.live { stroke: var(--tc, #2f6fe0); stroke-width: 3; opacity: 1; stroke-dasharray: 9 7; animation: gw-flow .7s linear infinite; }
+.gw.live.rev { animation-direction: reverse; }
+@keyframes gw-flow { to { stroke-dashoffset: -16; } }
+@media (prefers-reduced-motion: reduce) { #stage .gn > rect:first-of-type, .gw { transition: none; } #stage .gn.hit > rect:first-of-type, .gw.live { animation: none; } }
