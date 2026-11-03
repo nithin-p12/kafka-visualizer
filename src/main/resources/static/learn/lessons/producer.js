@@ -13,10 +13,11 @@ function scene(s) {
   const v = { rows: [[], [], []], logs: [[], [], []] };
   v.app = s.box(330, 235, 600, 360, '', { stroke: '#d8b7e9', rx: 14, fill: '#fcfaff' });
   s.text(v.app, -284, -160, 'Your app · KafkaProducer', { 'text-anchor': 'start', 'font-size': 15, 'font-weight': 650, fill: '#7a4aa3' });
-  v.send = s.box(110, 125, 120, 54, 'send()', { size: 17 });
-  v.ser = s.box(270, 125, 130, 54, 'serializer', { size: 16 });
-  v.part = s.box(430, 125, 130, 54, 'partitioner', { size: 16 });
-  s.line(171, 125, 203, 125); s.line(336, 125, 363, 125);
+  v.send = s.box(95, 125, 110, 54, 'send()', { size: 17 });
+  v.meta = s.box(228, 125, 124, 54, 'metadata', { size: 16, sub: 'not cached yet', subSize: 13 });
+  v.ser = s.box(362, 125, 120, 54, 'serializer', { size: 16 });
+  v.part = s.box(496, 125, 124, 54, 'partitioner', { size: 16 });
+  s.line(151, 125, 165, 125); s.line(291, 125, 301, 125); s.line(423, 125, 433, 125);
   v.buffer = s.box(300, 315, 440, 160, '', { stroke: '#c9ced2', rx: 10 });
   s.text(v.buffer, -208, -65, 'buffer · one batch per partition', { 'text-anchor': 'start', 'font-size': 14, fill: MUTED });
   v.rowBoxes = ROW_Y.map((y, p) => {
@@ -32,6 +33,23 @@ function scene(s) {
     return Object.assign(b, { name: `Broker ${p + 1}`, online: true });
   });
   return v;
+}
+// The producer asks a broker for the topic's metadata (partition count, leaders) and caches it.
+async function fetchMeta(s, v) {
+  if (v.metaCached) return;
+  const ask = s.box(228, 125, 160, 30, 'MetadataRequest', { size: 14, rx: 14, fill: '#edf3fe', stroke: '#2f6fe0', color: '#1f56b8' });
+  await s.pop(ask, 200);
+  await s.move(ask, BROKER_X - 60, BROKER_Y[0], 700);
+  ask.remove();
+  await s.pulse(v.brokers[0]);
+  const back = s.box(BROKER_X - 60, BROKER_Y[0], 270, 30, '3 partitions · P0→B1 P1→B2 P2→B3', { size: 14, rx: 14, fill: '#eef7e8', stroke: GREEN, color: GREEN });
+  await s.pop(back, 200);
+  await s.move(back, 228, 125, 700);
+  back.remove();
+  v.metaCached = true;
+  v.meta.sub.textContent = 'cached ✓';
+  v.meta.sub.setAttribute('fill', GREEN);
+  await s.pulse(v.meta);
 }
 // Put a record (already at some position) into partition p's batch.
 async function toRow(s, v, b, p, ms = 450) {
@@ -67,7 +85,7 @@ async function ship(s, v, p) {
 async function ack(s, v, p, first, last) {
   const pill = s.box(BROKER_X - 60, BROKER_Y[p] - 52, 150, 26, `✓ orders-${p} @ ${first === last ? first : `${first}–${last}`}`, { size: 12, fill: '#eef7e8', stroke: GREEN, color: GREEN, rx: 13 });
   await s.pop(pill, 200);
-  await s.move(pill, 110, 70, 650);
+  await s.move(pill, 95, 70, 650);
   await s.fade(pill, 0, 250);
   pill.remove();
 }
@@ -89,9 +107,20 @@ export default {
         observe: 'A record with key user-42 enters the producer.',
         focus: v => [v.send, v.rec],
         async run(s, v) {
-          v.rec = s.block(110, 185, 'user-42', GREY, { w: 92, h: 30, size: 13 });
+          v.rec = s.block(95, 185, 'user-42', GREY, { w: 92, h: 30, size: 13 });
           await s.pop(v.rec, 300);
           await s.pulse(v.send);
+        },
+      },
+      {
+        title: 'First: metadata for the topic',
+        text: 'Before anything else, send() checks that it knows the topic: how many partitions orders has (the partitioner needs that) and which broker leads each one (the sender needs that). The first send fetches this metadata from a broker and caches it; later sends use the cache.',
+        observe: 'A MetadataRequest goes to Broker 1; the reply lists 3 partitions and their leaders, and the box shows "cached ✓".',
+        focus: v => [v.meta],
+        async run(s, v) {
+          await s.move(v.rec, 228, 185, 500);
+          await s.pulse(v.meta);
+          await fetchMeta(s, v);
         },
       },
       {
@@ -100,7 +129,7 @@ export default {
         observe: 'The record moves through the serializer and becomes bytes.',
         focus: v => [v.ser, v.rec],
         async run(s, v) {
-          await s.move(v.rec, 270, 185, 550);
+          await s.move(v.rec, 362, 185, 550);
           await s.pulse(v.ser);
           v.rec.label.textContent = '01 6b 2f…';
           v.rec.rect.setAttribute('fill', '#65727a');
@@ -108,16 +137,16 @@ export default {
       },
       {
         title: 'The partitioner picks a partition',
-        text: 'Next the producer decides which partition gets the record. With a key, it hashes the key, so the same key always goes to the same partition. Without a key, records are spread out. The Key → partition lesson goes deeper.',
+        text: 'Now the producer decides which partition gets the record, using the partition count from the metadata. With a key, it hashes the key, so the same key always goes to the same partition. Without a key, records are spread out. The Key → partition lesson goes deeper.',
         observe: 'The key\'s hash picks one of the three partitions.',
         focus: v => [v.part, v.hash],
         async run(s, v) {
           v.p = partitionFor('user-42', 3);
-          await s.move(v.rec, 430, 185, 550);
+          await s.move(v.rec, 496, 185, 550);
           await s.pulse(v.part);
           v.rec.rect.setAttribute('fill', PC[v.p]);
           v.rec.label.textContent = `→ P${v.p}`;
-          v.hash = s.note(430, 218, `hash("user-42") % 3 = ${v.p}`, { 'font-size': 13, 'font-family': 'Consolas, monospace', fill: '#3d4a55' });
+          v.hash = s.note(496, 218, `hash("user-42") % 3 = ${v.p}`, { 'font-size': 13, 'font-family': 'Consolas, monospace', fill: '#3d4a55' });
           await s.show(v.hash, 250);
         },
       },
@@ -133,10 +162,10 @@ export default {
           await Promise.all([s.scale(rec, 1, 1), toRow(s, v, rec, v.p, 500)]);
           rec.rect.setAttribute('width', SMALL.w); rec.rect.setAttribute('x', -SMALL.w / 2);
           rec.rect.setAttribute('height', SMALL.h); rec.rect.setAttribute('y', -SMALL.h / 2);
-          v.returned = s.note(110, 218, 'send() returned ✓', { 'font-size': 13, 'font-weight': 650, fill: GREEN });
+          v.returned = s.note(95, 218, 'send() returned ✓', { 'font-size': 13, 'font-weight': 650, fill: GREEN });
           await s.show(v.returned, 200);
           for (const key of KEYS) {
-            const b = s.block(110, 185, '', GREY, SMALL);
+            const b = s.block(95, 185, '', GREY, SMALL);
             await s.pop(b, 120);
             await toRow(s, v, b, partitionFor(key, 3), 420);
           }
@@ -171,7 +200,7 @@ export default {
           setOnline(v.brokers[1], false);
           await s.shake(v.brokers[1]);
           const key = ['user-1', 'user-2', 'user-3', 'user-4', 'user-6', 'user-8'].find(k => partitionFor(k, 3) === 1);
-          const b = s.block(110, 185, '', GREY, SMALL);
+          const b = s.block(95, 185, '', GREY, SMALL);
           await s.pop(b, 150);
           await toRow(s, v, b, partitionFor(key, 3), 450);
           await ship(s, v, 1);
@@ -203,10 +232,11 @@ export default {
     // No key: the sticky partitioner fills one partition's batch, then moves on to the next partition.
     pick(v, key) { return key === 'no key' ? v.sticky : partitionFor(key, 3); },
     async add(s, v, input, count) {
+      await fetchMeta(s, v);
       const p = this.pick(v, input.key);
       if (v.logs[p].length + v.rows[p].length + count > 7) { v.message = `orders-${p} has no room for ${count} more in this sandbox. Try another key, or switch tabs and back to start again.`; return false; }
       for (let k = 0; k < count; k++) {
-        const b = s.block(110, 185, '', GREY, SMALL);
+        const b = s.block(95, 185, '', GREY, SMALL);
         await s.pop(b, 100);
         await toRow(s, v, b, p, 300);
       }
