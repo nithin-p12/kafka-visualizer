@@ -318,7 +318,7 @@ async function electNew(s, v, why) {
 }
 
 export default {
-  id: 'kraft', n: 26, title: 'KRaft controller', tagline: 'Who manages cluster metadata',
+  id: 'kraft', n: 27, title: 'KRaft controller', tagline: 'Who manages cluster metadata',
   docked: true,
   guide: {
     what: 'In KRaft mode a small quorum of controllers stores all cluster metadata as a replicated log, __cluster_metadata, using the Raft protocol: one active controller appends changes, the voters replicate them, a majority commits them, and brokers pull the log into their caches.',

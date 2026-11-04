@@ -395,3 +395,8 @@ a.card:hover { border-color: var(--lv); box-shadow: 0 6px 18px #20334714; transf
 #stage .gn.idle > rect:first-of-type { stroke-dasharray: 5 4; }
 .gw.own { stroke-width: 2.4; opacity: .55; }
 .gw.own.live { opacity: 1; }
+
+/* Our pipeline: following one execution, and clickable parts of the scene. */
+#stage .ep-faded { opacity: .1; }
+#stage .ep-card > rect:first-of-type { transition: stroke .3s ease, stroke-width .3s ease; }
+#stage .ep-card.ep-picked > rect:first-of-type { stroke: #13968a; stroke-width: 2.6; }

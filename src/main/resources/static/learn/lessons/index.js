@@ -21,12 +21,13 @@ import redelivery from './redelivery.js';
 import multiGroup from './multi-group.js';
 import journey from './journey.js';
 import bigPicture from './big-picture.js';
+import execPipeline from './exec-pipeline.js';
 import isr from './isr.js';
 import batching from './batching.js';
 import idempotence from './idempotence.js';
 import kraft from './kraft.js';
 
-export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, election, assignment, rebalance, redelivery, multiGroup, journey, bigPicture, isr, batching, idempotence, kraft];
+export const LESSONS = [record, topic, partition, offset, broker, cluster, replica, producer, consumer, group, commitLag, retention, keyRouting, acks, replication, election, assignment, rebalance, redelivery, multiGroup, journey, bigPicture, execPipeline, isr, batching, idempotence, kraft];
 
 export const LEVELS = [
   {
@@ -50,7 +51,7 @@ export const LEVELS = [
   },
   {
     id: 'e2e', title: 'Level 3 · End to end', blurb: 'One record\'s full journey, then the whole system at once.',
-    items: ['journey', 'big-picture'],
+    items: ['journey', 'big-picture', 'exec-pipeline'],
   },
   {
     id: 'deep', title: 'Level 4 · Deep dives (optional)', blurb: 'Interview-level internals. Leave these until the flow above makes sense.',

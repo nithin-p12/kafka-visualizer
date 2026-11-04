@@ -16,19 +16,21 @@ export class Camera {
     let drag = null;
     svg.addEventListener('pointerdown', e => {
       if (!this.world || e.button !== 0) return;
-      drag = { x: e.clientX, y: e.clientY, box: [...this.box], k: this.unitsPerPx(), moved: false };
-      svg.setPointerCapture(e.pointerId);
+      drag = { x: e.clientX, y: e.clientY, box: [...this.box], k: this.unitsPerPx(), moved: false, id: e.pointerId };
     });
     svg.addEventListener('pointermove', e => {
       if (!drag) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (!drag.moved && Math.hypot(dx, dy) < 3) return;
-      if (!drag.moved) { drag.moved = true; this.manual(); svg.classList.add('panning'); }
+      // capture only once it is a drag, so a plain click still reaches clickable parts of the scene
+      if (!drag.moved) { drag.moved = true; this.manual(); svg.classList.add('panning'); svg.setPointerCapture(drag.id); }
       this.set([drag.box[0] - dx * drag.k, drag.box[1] - dy * drag.k, drag.box[2], drag.box[3]]);
     });
-    const end = () => { drag = null; svg.classList.remove('panning'); };
+    const end = () => { this.dragged = !!drag?.moved; drag = null; svg.classList.remove('panning'); };
     svg.addEventListener('pointerup', end);
     svg.addEventListener('pointercancel', end);
+    // a drag must not end as a click on whatever is under the pointer
+    svg.addEventListener('click', e => { if (this.dragged) { e.stopPropagation(); this.dragged = false; } }, true);
     svg.addEventListener('dblclick', () => { if (this.world) { this.manual(); this.go(this.fitBox()); } });
     tools.querySelector('[data-zoom="in"]').addEventListener('click', () => { this.manual(); this.zoomAt(1.35); });
     tools.querySelector('[data-zoom="out"]').addEventListener('click', () => { this.manual(); this.zoomAt(1 / 1.35); });
