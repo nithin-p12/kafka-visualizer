@@ -1,5 +1,6 @@
 import { Stage, Cancelled } from './scene.js';
 import { Player } from './player.js';
+import { Camera } from './camera.js';
 import { LESSONS, LEVELS, lesson as lessonById, titleOf } from './lessons/index.js';
 
 const $ = id => document.getElementById(id);
@@ -22,6 +23,9 @@ const stage = new Stage($('stage'));
 // An invisible twin of the stage, laid exactly over it: each step is run there instantly first, so the guide card
 // can be placed against the step's final picture (and its spotlight) before the step plays, and then stay put.
 const ghost = new Stage($('ghost'));
+// Lessons with `zoom` draw a bigger world; the camera zooms and pans over it (steps may set `cam`).
+const camera = new Camera($('stage'), $('zoom-tools'));
+stage.camera = camera;
 let pausedByRecap = false, current = null, mode = 'watch', guideOn = read('kafka-learn-guide', true), tryState = null;
 // Lessons with `flows` (e.g. the end-to-end journey) have several Watch stories; `flow` is the one playing.
 let flow = null;
@@ -30,7 +34,7 @@ const flowsOf = l => (l?.flows ?? []).filter(f => !f.soon);
 const watchTrack = (l, id) => flowsOf(l).find(f => f.id === id)?.track ?? l.watch;
 
 const player = new Player(stage, {
-  step(i, step) { renderStep(i, step); },
+  step(i, step) { renderStep(i, step); if (current?.zoom) camera.step(step.cam); },
   async started(i) {
     if (docked()) return;
     const run = ++previewRun;
@@ -273,6 +277,7 @@ addEventListener('scroll', markActiveLevel, { passive: true });
 // ---------- lesson ----------
 function openLesson(l, resume = {}) {
   current = l;
+  camera.enable(l.zoom);
   $('lesson-num').textContent = l.n;
   $('lesson-title').textContent = l.title;
   $('lesson-tagline').textContent = l.tagline;
@@ -447,6 +452,7 @@ function openTry() {
   save('kafka-learn-progress', progress);
   clearSpotlight();
   const t = current.tryIt, input = {};
+  if (current.zoom) camera.step(t.cam);
   for (const c of t.controls) if (c.type === 'choice') input[c.name] = c.options[0]; else if (c.type === 'text') input[c.name] = c.value ?? '';
   $('g-observe').textContent = t.observe;
   $('try-intro').textContent = t.intro;
@@ -527,7 +533,7 @@ function route() {
   $('lesson-view').hidden = !l;
   document.body.classList.toggle('lesson-mode', !!l);
   if (l) openLesson(l, { mode: resumeMode, step: +resumeStep || 0 });
-  else { player.stop(); stage.reset(); current = null; renderMap(); document.title = 'Learn Kafka'; if (document.fullscreenElement) document.exitFullscreen(); }
+  else { player.stop(); stage.reset(); current = null; camera.enable(null); renderMap(); document.title = 'Learn Kafka'; if (document.fullscreenElement) document.exitFullscreen(); }
   window.scrollTo(0, 0);
 }
 addEventListener('hashchange', route);
@@ -566,6 +572,9 @@ addEventListener('keydown', e => {
   else if (k === 'r') showRecap(!recapOn);
   else if (k === 'm') toggleGuideCard();
   else if (k === 'l' && current?.docked && playing) setLoop(!player.loop);
+  else if (current?.zoom && (e.key === '+' || e.key === '=')) $('zoom-tools').querySelector('[data-zoom="in"]').click();
+  else if (current?.zoom && e.key === '-') $('zoom-tools').querySelector('[data-zoom="out"]').click();
+  else if (current?.zoom && e.key === '0') $('zoom-tools').querySelector('[data-zoom="fit"]').click();
   else if (e.key === 'Escape' && recapOn && !document.fullscreenElement) showRecap(false);
 });
 

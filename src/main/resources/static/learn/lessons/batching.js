@@ -250,7 +250,7 @@ async function trySend(s, v, n, input) {
 }
 
 export default {
-  id: 'batching', n: 23, title: 'Batching & compression', tagline: 'linger.ms, batch.size, compression.type',
+  id: 'batching', n: 24, title: 'Batching & compression', tagline: 'linger.ms, batch.size, compression.type',
   docked: true,
   guide: {
     what: 'The producer collects records into one batch per partition. A batch is sent when it reaches batch.size or when linger.ms has passed; the sender groups ready batches by broker into one request, and each batch can be compressed.',

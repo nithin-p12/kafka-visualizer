@@ -342,7 +342,7 @@ async function tryCrash(s, v) {
 }
 
 export default {
-  id: 'isr', n: 22, title: 'ISR & high watermark', tagline: 'What "committed" means on the broker',
+  id: 'isr', n: 23, title: 'ISR & high watermark', tagline: 'What "committed" means on the broker',
   docked: true,
   guide: {
     what: 'Each replica has a log end offset (LEO). The leader\'s high watermark is the smallest LEO among the in-sync replicas: everything below it is committed, readable by consumers and acknowledged to acks=all producers. Records above it may survive a leader change or be truncated.',

@@ -272,7 +272,7 @@ async function trySend(s, v, input, lose) {
 }
 
 export default {
-  id: 'idempotence', n: 24, title: 'Idempotent producer & exactly-once', tagline: 'No duplicates on retry',
+  id: 'idempotence', n: 25, title: 'Idempotent producer & exactly-once', tagline: 'No duplicates on retry',
   docked: true,
   guide: {
     what: 'A retry after a lost response can write a record twice. The idempotent producer tags every batch with a producer id and sequence number so the leader can drop the duplicate. Transactions go further: writes to several partitions and the consumed offsets become visible together, or not at all.',
