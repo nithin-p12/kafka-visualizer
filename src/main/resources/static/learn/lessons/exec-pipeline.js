@@ -11,30 +11,30 @@
 // a straight horizontal line.
 import { el, place, Cancelled } from '../scene.js';
 
-const W = 4060, H = 2240;
+const W = 3990, H = 2960;
 const INK = '#1f2933', SUB = '#52606d', MONO = 'Consolas, monospace';
 const SEC = {                                          // section background, border, title
-  users: ['#f4ece4', '#9a6b42', '#5c3b1e'], kafka: ['#e8f0fb', '#4f7fcf', '#1e467f'], rs: ['#e7f5ea', '#3f9a5a', '#1d5e30'],
-  rep: ['#fdf0e0', '#d4802b', '#8a4708'], not: ['#fce8f0', '#c95083', '#86224f'],
+  users: ['#fdf6d8', '#c9a227', '#5e4700'], kafka: ['#f2ebfc', '#8b5cc7', '#4c2a85'], rs: ['#e7effc', '#4a7bd0', '#1e3f7a'],
+  db: ['#e6f5e9', '#3f9a5a', '#1d5e30'], rep: ['#fdeaf3', '#cf5a8d', '#86224f'], not: ['#fff0e0', '#dd7f2b', '#8a4708'],
 };
-const TOPIC = { status: '#7a46c9', results: '#0f7f8c', done: '#4338ca' };
-const USER = { Nithin: '#c05621', Punith: '#15803d' };
+const TOPIC = { status: '#0f766e', results: '#4338ca', done: '#a21caf' };
+const USER = { Nithin: '#c2410c', Punith: '#15803d' };
 const STATE = { pending: ['#eef1f4', '#52606d', '#cfd6dd'], running: ['#fdf3dc', '#8a5a00', '#e8c36d'], passed: ['#e3f4e7', '#1d6b34', '#93cfa3'], failed: ['#fde4e4', '#a61b1b', '#eea3a3'] };
 const AMBER = '#b7791f', GREEN = '#1d6b34', RED = '#b42318', GREY = '#9aa5b1';
 
 // ---- layout ----
-const TOP = [90, 790, 1490];                          // band of broker n and pod n
+const TOP = [730, 1430, 2130];                          // band of broker n and pod n
 const ROW = { s: [105, 175], r: [270, 340, 410, 480, 550, 620] };
-const BK = { x: 920, w: 680 }, LANE = { x: 920, w: 600 }, laneL = LANE.x - LANE.w / 2, laneR = LANE.x + LANE.w / 2;
-const GUT = 550;                                       // copy gutter inside the cluster, left of the brokers
-const LAP = { x: 255, w: 370, Nithin: 560, Punith: 1500 }, TRUNK = { Nithin: 494, Punith: 508 };
-const POD = { x: 1720, w: 600 }, TH = { x: 1720, w: 540 }, thL = TH.x - TH.w / 2, thR = TH.x + TH.w / 2;
-const DB = { x: 2340, y: 365, w: 520, h: 550 }, DB_IN = 2040;
-const EX = { x: 3010, lane: 460, B: [['B1', 965, 130], ['B2', 1160, 200], ['B3', 1355, 130]] };
-const EX_LANES = { 'e0@B1': 980, 'e0@B2': 1130, 'e1@B2': 1200, 'e1@B3': 1370 };
-const EX_GUT = 3285, OUT_X = [2660, 2672, 2684];
-const SVC = { x: 3730, w: 560, th: 500 };
-const SVC_TH = { rp1: 350, rp2: 500, nt1: 1650, nt2: 1800 };
+const BK = { x: 1050, w: 680 }, LANE = { x: 1050, w: 600 }, laneL = LANE.x - LANE.w / 2, laneR = LANE.x + LANE.w / 2;
+const GUT = 680;                                       // copy gutter inside the cluster, left of the brokers
+const LAP = { x: 255, w: 370, Nithin: 1200, Punith: 2140 }, TRUNK = { Nithin: 552, Punith: 572 };
+const POD = { x: 1980, w: 600 }, TH = { x: 1980, w: 540 }, thL = TH.x - TH.w / 2, thR = TH.x + TH.w / 2;
+const DB = { x: 1035, y: 320, w: 790, h: 520 }, DB_IN = 2304, DB_BUS = 320;
+const EX = { x: 2820, lane: 460, B: [['B1', 1605, 130], ['B2', 1800, 200], ['B3', 1995, 130]] };
+const EX_LANES = { 'e0@B1': 1620, 'e0@B2': 1770, 'e1@B2': 1840, 'e1@B3': 2010 };
+const EX_GUT = 3095, OUT_X = [2420, 2436, 2452];
+const SVC = { x: 3640, w: 560, th: 500 };
+const SVC_TH = { rp1: 990, rp2: 1140, nt1: 2290, nt2: 2440 };
 
 // partitions: key → topic, leader, follower
 const PARTS = {};
@@ -64,8 +64,8 @@ const thY = k => k[0] === 'p' ? TOP[+k[1]] + (k[2] === 's' ? ROW.s[+k[3] - 1] : 
 const SCRIPTS = ['SCR1', 'SCR2', 'SCR3'], FAILS = new Set(['SCR2']);
 const EVENTS = [['st', 'M1'], ['st', 'SCR1'], ['res', 'SCR1'], ['st', 'SCR2'], ['res', 'SCR2'], ['st', 'SCR3'], ['res', 'SCR3']];
 const CAM = {
-  left: [0, 40, 1460, 1000], band0: [0, 40, 2640, 800], rs: [1330, 20, 1600, 1300], pods: [1320, 40, 1060, 2160],
-  db: [1330, 20, 1600, 1000], exec: [1960, 300, 1440, 1300], right: [2600, 150, 1460, 1980], fanout: [2700, 200, 1360, 1700],
+  left: [0, 600, 1500, 1100], band0: [0, 20, 2400, 1460], rs: [1560, 600, 860, 2320], pods: [1560, 600, 860, 2320],
+  db: [560, 0, 1900, 1500], exec: [1600, 600, 1620, 1700], right: [2480, 780, 1510, 2120], fanout: [2480, 780, 1510, 2120],
 };
 
 const safe = p => p.catch(e => { if (!(e instanceof Cancelled)) console.error(e); });
@@ -144,7 +144,7 @@ function scene(s, { interactive = false } = {}) {
   const rail = (d, color = '#d3dae1', w = 2) => el('path', { d, fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linecap': 'round' }, v.rails);
 
   // ---- users' laptops (producers) ----
-  frame(s, v, 'users', LAP.x, 1120, 450, 2120, 'Users\' laptops', { sec: 'users', right: 'producers' });
+  frame(s, v, 'users', LAP.x, 1750, 450, 2200, 'Users\' laptops', { sec: 'users', right: 'producers' });
   for (const u of ['Nithin', 'Punith']) {
     const c = USER[u], y = LAP[u], f = frame(s, v, u, LAP.x, y, LAP.w, 330, `💻 ${u}'s laptop`, { fill: '#fff', stroke: c, color: c, size: 20 });
     f.rect.setAttribute('stroke-width', 2.4);
@@ -168,21 +168,21 @@ function scene(s, { interactive = false } = {}) {
   }
 
   // ---- the Kafka cluster: three brokers, partitions inside them ----
-  frame(s, v, 'cluster', 905, 1120, 790, 2120, 'Kafka cluster', { sec: 'kafka', right: '3 brokers · RF 2' });
+  frame(s, v, 'cluster', 1035, 1750, 790, 2200, 'Kafka cluster', { sec: 'kafka', right: '3 brokers · RF 2' });
   rail(`M${GUT},${TOP[0] + 60} L${GUT},${TOP[2] + 640}`);
   for (let n = 0; n < 3; n++) {
-    const f = frame(s, v, B(n), BK.x, TOP[n] + 335, BK.w, 670, `Broker ${B(n)}`, { fill: '#fff', stroke: '#8fb0e0', color: SEC.kafka[2], size: 21 });
+    const f = frame(s, v, B(n), BK.x, TOP[n] + 335, BK.w, 670, `Broker ${B(n)}`, { fill: '#fff', stroke: '#b69ae0', color: SEC.kafka[2], size: 21 });
     txt(s, f, -BK.w / 2 + 18, ROW.s[0] - 335 - 45, 'topic status · 3 partitions', 16, TOPIC.status, { 'font-weight': 700 });
     txt(s, f, -BK.w / 2 + 18, ROW.r[0] - 335 - 45, 'topic results · 9 partitions', 16, TOPIC.results, { 'font-weight': 700 });
     for (const [pk, y] of lanesOf(n)) lane(s, v, pk, n, LANE.x, y);
   }
 
   // ---- results-service: 3 pods of the same code, each with 2 listeners ----
-  frame(s, v, 'rs', 2000, 1120, 1240, 2120, 'results-service', { sec: 'rs', right: '3 pods (same image) · 2 listener groups' });
+  frame(s, v, 'rs', 1980, 1770, 700, 2240, 'results-service · 3 pods (same image) · 2 listener groups', { sec: 'rs' });
   for (let n = 0; n < 3; n++) {
-    const t = TOP[n], pod = frame(s, v, `pod${n}`, POD.x, t + 335, POD.w, 670, `pod ${n + 1} · results-service-${n + 1}`, { fill: '#fbfefc', stroke: '#7cc191', color: SEC.rs[2], size: 19 });
+    const t = TOP[n], pod = frame(s, v, `pod${n}`, POD.x, t + 335, POD.w, 670, `pod ${n + 1} · results-service-${n + 1}`, { fill: '#fff', stroke: '#8fb0e0', color: SEC.rs[2], size: 19 });
     const lst = (y0, y1, g, conc, key) => {
-      const b = s.box(POD.x, t + (y0 + y1) / 2, 570, y1 - y0, '', { rx: 10, fill: '#f2faf4', stroke: '#b7dcc1' });
+      const b = s.box(POD.x, t + (y0 + y1) / 2, 570, y1 - y0, '', { rx: 10, fill: '#f3f7fe', stroke: '#bcd0f0' });
       b.classList.add('gn'); v.n[key] = b;
       txt(s, b, -270, -(y1 - y0) / 2 + 17, `${GROUPS[g].label} · group ${GROUPS[g].name} · concurrency ${conc}`, 14.5, SEC.rs[2], { 'font-weight': 700 });
     };
@@ -197,25 +197,26 @@ function scene(s, { interactive = false } = {}) {
     prod.classList.add('gn'); v.n[`p${n}prod`] = prod;
     s.text(prod, 0, 0, 'producer (KafkaTemplate) → exec-completed', { 'font-size': 15, 'font-weight': 700, fill: TOPIC.done });
     // writes to the DB
-    for (const y of [t + ROW.s[0], t + ROW.s[1], t + ROW.r[0], t + ROW.r[1], t + ROW.r[2]]) rail(rpath([[thR, y], [DB_IN, y], [DB_IN, dbY(y)], [DB.x - DB.w / 2, dbY(y)]]), '#cfe6d6');
-    for (const ly of [EX_LANES['e0@B1'] + 8, EX_LANES['e1@B2'] + 8]) rail(rpath([[POD.x + 270, t + 600], [OUT_X[n], t + 600], [OUT_X[n], ly], [EX.x - EX.lane / 2, ly]]), '#c9cdf0');
+    for (const y of [t + ROW.s[0], t + ROW.s[1], t + ROW.r[0], t + ROW.r[1], t + ROW.r[2]]) rail(rpath([[thR, y], [DB_IN, y], [DB_IN, DB_BUS], [DB.x + DB.w / 2, DB_BUS]]), '#9fd3ad', 2.5);
+    for (const ly of [EX_LANES['e0@B1'] + 8, EX_LANES['e1@B2'] + 8]) rail(rpath([[POD.x + 270, t + 600], [OUT_X[n], t + 600], [OUT_X[n], ly], [EX.x - EX.lane / 2, ly]]), '#e2b6ea', 2.5);
   }
   // group summaries
-  const sum = s.g(POD.x - 300, 2165);
-  txt(s, sum, 0, 0, 'execution-status-group: 6 consumers · 3 partitions → 3 busy, 3 idle   ·   execution-result-group: 9 consumers · 9 partitions → 1 each', 16, SEC.rs[2], { 'font-weight': 700 });
-  const db = frame(s, v, 'db', DB.x, DB.y, DB.w, DB.h, '🗄 results DB · execution tree', { fill: '#fff', stroke: '#7cc191', color: SEC.rs[2], size: 19 });
+  const sum = s.g(POD.x - 330, TOP[2] + 712);
+  txt(s, sum, 0, 0, 'execution-status-group: 6 consumers · 3 partitions → 3 busy, 3 idle', 17, SEC.rs[2], { 'font-weight': 700 });
+  txt(s, sum, 0, 26, 'execution-result-group: 9 consumers · 9 partitions → 1 each', 17, SEC.rs[2], { 'font-weight': 700 });
+  const db = frame(s, v, 'db', DB.x, DB.y, DB.w, DB.h, '🗄 results DB · execution tree (shared by all pods)', { sec: 'db', size: 21 });
   db.empty = s.text(db, 0, 0, 'No execution yet', { 'font-size': 17, fill: SUB });
   v.cardLayer = s.g(0, 0);
 
   // ---- the same cluster again: topic exec-completed ----
-  frame(s, v, 'ecl', EX.x, 1140, 580, 620, 'Kafka cluster (the same one)', { sec: 'kafka', size: 19 });
+  frame(s, v, 'ecl', EX.x, 1780, 580, 620, 'Kafka cluster (the same one)', { sec: 'kafka', size: 19 });
   txt(s, v.n.ecl, -270, -310 + 54, 'topic exec-completed · 2 partitions · RF 2', 15.5, TOPIC.done, { 'font-weight': 700 });
-  for (const [b, y, h] of EX.B) frame(s, v, `x${b}`, EX.x, y, 520, h, `Broker ${b}`, { fill: '#fff', stroke: '#8fb0e0', color: SEC.kafka[2], size: 17 });
+  for (const [b, y, h] of EX.B) frame(s, v, `x${b}`, EX.x, y, 520, h, `Broker ${b}`, { fill: '#fff', stroke: '#b69ae0', color: SEC.kafka[2], size: 17 });
   for (const [k, y] of Object.entries(EX_LANES)) { const [pk, b] = k.split('@'); lane(s, v, pk, +b[1] - 1, EX.x, y + 8, EX.lane); }
   rail(`M${EX_GUT},${EX_LANES['e0@B1'] + 8} L${EX_GUT},${EX_LANES['e1@B3'] + 8}`);
 
   // ---- reports and notification: two more groups on exec-completed ----
-  for (const [g, y0, title, groupKey] of [['rep', 200, '📄 reports-service', 'rp'], ['not', 1500, '✉ notification-service', 'nt']]) {
+  for (const [g, y0, title, groupKey] of [['rep', 840, '📄 reports-service', 'rp'], ['not', 2140, '✉ notification-service', 'nt']]) {
     frame(s, v, g, SVC.x, y0 + 350, 620, 700, title, { sec: g, right: `group ${GROUPS[groupKey].name}` });
     for (const k of [1, 2]) {
       const key = `${groupKey}${k}`, y = SVC_TH[key];
@@ -236,15 +237,15 @@ function scene(s, { interactive = false } = {}) {
     m.dataset.part = pk;
   }
 
-  const lg = s.g(40, 2222);
+  const lg = s.g(40, H - 20);
   txt(s, lg, 0, 0, '● status message   ■ result   colour = whose laptop   solid lane = leader, dashed = copy   line = partition → its one consumer in that group   click a lane to see its consumers', 16, SUB);
 
   for (const pk of Object.keys(PARTS)) v.chains[pk] = {};
+  s.root.append(v.rails, v.maps);                    // every connecting line above the boxes it joins
   v.flights = s.g(0, 0);
   v.packs = s.g(0, 0);
   return v;
 }
-const dbY = y => Math.max(DB.y - DB.h / 2 + 60, Math.min(DB.y + DB.h / 2 - 30, y));
 const laneOf = (v, pk, b) => v.lanes[`${pk}@${b}`];
 
 // ---- motion ----
@@ -286,7 +287,7 @@ const prodPath = (u, L) => rpath([[LAP.x + LAP.w / 2, LAP[u]], [TRUNK[u], LAP[u]
 const copyPath = (A, Bl) => A.pk[0] === 'e'
   ? rpath([[A.x + A.w / 2, A.y], [EX_GUT, A.y], [EX_GUT, Bl.y], [Bl.x + Bl.w / 2, Bl.y]])
   : rpath([[laneL, A.y], [GUT, A.y], [GUT, Bl.y], [laneL, Bl.y]]);
-const dbPath = k => { const y = thY(k); return rpath([[thR, y], [DB_IN, y], [DB_IN, dbY(y)], [DB.x - DB.w / 2, dbY(y)]]); };
+const dbPath = k => { const y = thY(k); return rpath([[thR, y], [DB_IN, y], [DB_IN, DB_BUS], [DB.x + DB.w / 2, DB_BUS]]); };
 const outPath = (n, L) => rpath([[POD.x + 270, TOP[n] + 600], [OUT_X[n], TOP[n] + 600], [OUT_X[n], L.y], [L.x - L.w / 2, L.y]]);
 
 // Sticky partitioner (no key): stay on one partition for a batch, then move to another.
@@ -346,7 +347,7 @@ function drawCard(s, v, ex) {
   v.n.db.empty.textContent = '';
   const h = 50 + ex.users.length * 44, c = s.g(0, 0, v.cardLayer);
   c.classList.add('ep-card');
-  el('rect', { x: 0, y: 0, width: 480, height: h, rx: 10, fill: '#f8fcf9', stroke: '#b7dcc1', 'stroke-width': 1.5 }, c);
+  el('rect', { x: 0, y: 0, width: 480, height: h, rx: 10, fill: '#fff', stroke: '#9fd3ad', 'stroke-width': 1.5 }, c);
   txt(s, c, 14, 22, `${ex.id} · ${ex.mode}`, 17, INK, { 'font-weight': 700 });
   c.count = s.text(c, 466, 22, '', { 'text-anchor': 'end', 'font-size': 16, 'font-weight': 700, fill: SUB });
   c.chips = {};
@@ -361,9 +362,9 @@ function drawCard(s, v, ex) {
   c.addEventListener('click', () => focusExec(v, v.focus === ex.id ? null : ex.id));
   ex.card = c;
   v.cards.unshift(c);
-  while (v.cards.length > 4) v.cards.pop().remove();
-  let y = DB.y - DB.h / 2 + 52;
-  for (const k of v.cards) { place(k, DB.x - 240, y); y += k.h + 12; }
+  while (v.cards.length > 3) v.cards.pop().remove();
+  let y = DB.y - DB.h / 2 + 56;
+  for (const k of v.cards) { place(k, DB.x - 240, y); y += k.h + 14; }
   paintCard(v, ex);
 }
 function paintCard(v, ex) {
